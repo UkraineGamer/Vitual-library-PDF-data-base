@@ -1,0 +1,5 @@
+{
+  "extraPaths": [
+    "${env:APPDATA}/Python/Python311/site-packages"
+  ]
+}

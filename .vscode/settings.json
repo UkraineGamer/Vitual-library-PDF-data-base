@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "C:\\Program Files\\Python311\\python.exe",
+  "python.analysis.extraPaths": [
+    "${env:APPDATA}\\Python\\Python311\\site-packages"
+  ]
+}
