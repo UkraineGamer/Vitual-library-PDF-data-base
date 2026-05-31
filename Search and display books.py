@@ -3,8 +3,20 @@ from gridfs import GridFS
 from dotenv import load_dotenv
 import os
 
+client = MongoClient("mongodb://localhost:27017/")
+
 db = client["libary"]
 collection = db["books"]
 
-print("Список книг:/n")
+print("Список книг:\n")
 
+for book in collection.find():
+    print(book["title"], book["author"], book["year"])
+
+search = input("\n Введіть назву книги: ")
+result = collection.find_one({"title": search})
+
+if result:
+    print(f"Знайдена книга: {result['title']} автор: {result['author']} рік видання: {result['year']}")
+else:
+    print("книгу не знайдено")
