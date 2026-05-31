@@ -1,10 +1,12 @@
 from pymongo import MongoClient
 from gridfs import GridFS
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 
-client = MongoClient("mongodb://localhost:27017/")
+load_dotenv(Path("secure.env"))
 
+client = os.getenv("MONGO_URI")
 db = client["libary"]
 collection = db["books"]
 
