@@ -26,4 +26,5 @@ def search_books(title):
 
 display_books()
 
-book_title = input("\n Введіть назву книги: ")
+book_title = input("\n Введіть назву книги для рошуку: ")
+search_books(book_title)
