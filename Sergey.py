@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import font as tkfont
 import requests
+from tkinter import filedialog
+
 
 COLORS = {
     "app": "#07121f",
@@ -23,144 +25,151 @@ COLORS = {
 
 
 class BookSearch:
-    def search_books(title):
-        url = f"https://openlibrary.org/search.json?title={title}"
+    def __init__(self):
+        self.file_root = ''
 
-    response = requests.get(url)
+    def search_books(self, title, uri):
 
-    if response.status_code == 200:
-        data = response.json()
+        response = requests.get(uri)
 
-        books = data["docs"][:10]  # перші 10 результатів
+        if response.status_code == 200:
+            data = response.json()
 
-        if books:
-            for i, book in enumerate(books, 1):
-                name = book.get("title", "Невідомо")
-                author = ", ".join(book.get("author_name", ["Невідомо"]))
-                year = book.get("first_publish_year", "Невідомо")
+            books = data["docs"][:10]  # перші 10 результатів
 
-                print(f"{i}. {name}")
-                print(f"   Автор: {author}")
-                print(f"   Рік: {year}")
-                print()
+            if books:
+                for i, book in enumerate(books, 1):
+                    name = book.get("title", "Невідомо")
+                    author = ", ".join(book.get("author_name", ["Невідомо"]))
+                    year = book.get("first_publish_year", "Невідомо")
+
+                    print(f"{i}. {name}")
+                    print(f"   Автор: {author}")
+                    print(f"   Рік: {year}")
+                    print()
+            else:
+                print("Книги не знайдено.")
         else:
-            print("Книги не знайдено.")
-    else:
-        print("Помилка підключення.")
+            print("Помилка підключення.")
 
-query = input("Введіть назву книги: ")
-search_books(query)
+    def get_file_path(self, parent=None) -> str:
+        file_path = filedialog.askopenfilename(parent=parent)
+        self.file_root = str(file_path) if file_path else ""
+        return self.file_root
 
-    # {
-    #     "id": "1984",
-    #     "title": "1984",
-    #     "author": "Джордж Орвелл",
-    #     "meta": "Фантастика, Антиутопія",
-    #     "categories": ["Усі", "Художня література"],
-    #     "pages": 328,
-    #     "isbn": "978-0-452-28423-4",
-    #     "format": "EPUB",
-    #     "size": "1.2 МБ",
-    #     "rating": "4.3",
-    #     "reviews": "128",
-    #     "language": "Українська",
-    #     "date": "8 червня 1949",
-    #     "publisher": "Secker & Warburg",
-    #     "description": (
-    #         "Класичний роман-антиутопія про тоталітарне майбутнє, "
-    #         "де держава контролює кожен аспект життя людини."
-    #     ),
-    #     "cover_bg": "#271d17",
-    #     "cover_accent": "#e63737",
-    # },
-    # {
-    #     "id": "hobbit",
-    #     "title": "Гобіт, або Туди й назад",
-    #     "author": "Дж. Р. Р. Толкін",
-    #     "meta": "Фентезі, Пригоди",
-    #     "categories": ["Усі", "Художня література"],
-    #     "pages": 310,
-    #     "isbn": "978-0-261-10221-4",
-    #     "format": "EPUB",
-    #     "size": "1.6 МБ",
-    #     "rating": "4.8",
-    #     "reviews": "246",
-    #     "language": "Українська",
-    #     "date": "21 вересня 1937",
-    #     "publisher": "George Allen & Unwin",
-    #     "description": (
-    #         "Подорож Більбо Беггінса до Самотньої гори, повна загадок, "
-    #         "небезпек і відкриттів."
-    #     ),
-    #     "cover_bg": "#153b33",
-    #     "cover_accent": "#79d178",
-    # },
-    # {
-    #     "id": "sapiens",
-    #     "title": "Sapiens. Людина розумна",
-    #     "author": "Юваль Ной Харарі",
-    #     "meta": "Нон-фікшн, Історія",
-    #     "categories": ["Усі", "Нон-фікшн", "Історія", "Наука"],
-    #     "pages": 512,
-    #     "isbn": "978-617-12-5470-7",
-    #     "format": "EPUB",
-    #     "size": "1.4 МБ",
-    #     "rating": "4.5",
-    #     "reviews": "312",
-    #     "language": "Українська",
-    #     "date": "2011",
-    #     "publisher": "КСД",
-    #     "description": (
-    #         "Коротка історія людства від появи Homo sapiens до сучасних "
-    #         "суспільств, технологій і глобальних ідей."
-    #     ),
-    #     "cover_bg": "#f4e9d4",
-    #     "cover_accent": "#d95d39",
-    # },
-    # {
-    #     "id": "think-grow",
-    #     "title": "Думай і багатій",
-    #     "author": "Наполеон Гілл",
-    #     "meta": "Бізнес, Саморозвиток",
-    #     "categories": ["Усі", "Бізнес"],
-    #     "pages": 176,
-    #     "isbn": "978-966-577-355-6",
-    #     "format": "EPUB",
-    #     "size": "1.1 МБ",
-    #     "rating": "4.1",
-    #     "reviews": "97",
-    #     "language": "Українська",
-    #     "date": "1937",
-    #     "publisher": "The Ralston Society",
-    #     "description": (
-    #         "Практичний погляд на цілі, дисципліну та мислення, яке допомагає "
-    #         "рухатись до фінансових результатів."
-    #     ),
-    #     "cover_bg": "#1d1710",
-    #     "cover_accent": "#c9a44a",
-    # },
-    # {
-    #     "id": "short-history",
-    #     "title": "Коротка історія майже всього",
-    #     "author": "Білл Брайсон",
-    #     "meta": "Наука, Популярна наука",
-    #     "categories": ["Усі", "Наука", "Нон-фікшн"],
-    #     "pages": 544,
-    #     "isbn": "978-055-299704-1",
-    #     "format": "EPUB",
-    #     "size": "2.7 МБ",
-    #     "rating": "4.4",
-    #     "reviews": "185",
-    #     "language": "Українська",
-    #     "date": "2003",
-    #     "publisher": "Doubleday",
-    #     "description": (
-    #         "Доступна мандрівка крізь головні наукові відкриття: від космосу "
-    #         "до геології, біології та історії цивілізації."
-    #     ),
-    #     "cover_bg": "#151312",
-    #     "cover_accent": "#c89745",
-    # },
+
+BOOKS = [
+    {
+        "id": "1984",
+        "title": "1984",
+        "author": "Джордж Орвелл",
+        "meta": "Фантастика, Антиутопія",
+        "categories": ["Усі", "Художня література"],
+        "pages": 328,
+        "isbn": "978-0-452-28423-4",
+        "format": "EPUB",
+        "size": "1.2 МБ",
+        "rating": "4.3",
+        "reviews": "128",
+        "language": "Українська",
+        "date": "8 червня 1949",
+        "publisher": "Secker & Warburg",
+        "description": (
+            "Класичний роман-антиутопія про тоталітарне майбутнє, "
+            "де держава контролює кожен аспект життя людини."
+        ),
+        "cover_bg": "#271d17",
+        "cover_accent": "#e63737",
+    },
+    {
+        "id": "hobbit",
+        "title": "Гобіт, або Туди й назад",
+        "author": "Дж. Р. Р. Толкін",
+        "meta": "Фентезі, Пригоди",
+        "categories": ["Усі", "Художня література"],
+        "pages": 310,
+        "isbn": "978-0-261-10221-4",
+        "format": "EPUB",
+        "size": "1.6 МБ",
+        "rating": "4.8",
+        "reviews": "246",
+        "language": "Українська",
+        "date": "21 вересня 1937",
+        "publisher": "George Allen & Unwin",
+        "description": (
+            "Подорож Більбо Беггінса до Самотньої гори, повна загадок, "
+            "небезпек і відкриттів."
+        ),
+        "cover_bg": "#153b33",
+        "cover_accent": "#79d178",
+    },
+    {
+        "id": "sapiens",
+        "title": "Sapiens. Людина розумна",
+        "author": "Юваль Ной Харарі",
+        "meta": "Нон-фікшн, Історія",
+        "categories": ["Усі", "Нон-фікшн", "Історія", "Наука"],
+        "pages": 512,
+        "isbn": "978-617-12-5470-7",
+        "format": "EPUB",
+        "size": "1.4 МБ",
+        "rating": "4.5",
+        "reviews": "312",
+        "language": "Українська",
+        "date": "2011",
+        "publisher": "КСД",
+        "description": (
+            "Коротка історія людства від появи Homo sapiens до сучасних "
+            "суспільств, технологій і глобальних ідей."
+        ),
+        "cover_bg": "#f4e9d4",
+        "cover_accent": "#d95d39",
+    },
+    {
+        "id": "think-grow",
+        "title": "Думай і багатій",
+        "author": "Наполеон Гілл",
+        "meta": "Бізнес, Саморозвиток",
+        "categories": ["Усі", "Бізнес"],
+        "pages": 176,
+        "isbn": "978-966-577-355-6",
+        "format": "EPUB",
+        "size": "1.1 МБ",
+        "rating": "4.1",
+        "reviews": "97",
+        "language": "Українська",
+        "date": "1937",
+        "publisher": "The Ralston Society",
+        "description": (
+            "Практичний погляд на цілі, дисципліну та мислення, яке допомагає "
+            "рухатись до фінансових результатів."
+        ),
+        "cover_bg": "#1d1710",
+        "cover_accent": "#c9a44a",
+    },
+    {
+        "id": "short-history",
+        "title": "Коротка історія майже всього",
+        "author": "Білл Брайсон",
+        "meta": "Наука, Популярна наука",
+        "categories": ["Усі", "Наука", "Нон-фікшн"],
+        "pages": 544,
+        "isbn": "978-055-299704-1",
+        "format": "EPUB",
+        "size": "2.7 МБ",
+        "rating": "4.4",
+        "reviews": "185",
+        "language": "Українська",
+        "date": "2003",
+        "publisher": "Doubleday",
+        "description": (
+            "Доступна мандрівка крізь головні наукові відкриття: від космосу "
+            "до геології, біології та історії цивілізації."
+        ),
+        "cover_bg": "#151312",
+        "cover_accent": "#c89745",
+    },
+]
 
 
 
@@ -221,6 +230,7 @@ CATEGORIES = [
 
 class BookDownloaderApp:
     def __init__(self) -> None:
+        self.book_search = BookSearch()
         self.root = tk.Tk()
         self.root.title("BookDownloader")
         self.root.geometry("1280x850")
@@ -487,6 +497,10 @@ class BookDownloaderApp:
         self.draw()
 
     def _start_download(self, book_id: str) -> None:
+        file_path = self.book_search.get_file_path(self.root)
+        if not file_path:
+            return
+
         book = self._book_by_id(book_id)
         for item in DOWNLOADS:
             if item["book_id"] == book_id:
@@ -494,6 +508,7 @@ class BookDownloaderApp:
                 item["date"] = "Щойно"
                 item["size"] = book["size"]
                 item["progress"] = 100
+                item["file_path"] = file_path
                 return
         DOWNLOADS.insert(
             0,
@@ -503,6 +518,7 @@ class BookDownloaderApp:
                 "date": "Щойно",
                 "size": book["size"],
                 "progress": 100,
+                "file_path": file_path,
             },
         )
 
