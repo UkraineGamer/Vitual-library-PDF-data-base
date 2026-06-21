@@ -344,7 +344,20 @@ class BookDownloaderApp:
         self.extra_books: dict[str, dict] = {}
         self.results_scroll = 0
         self.results_scroll_bounds: tuple[float, float, float, float, int] | None = None
-        self.results_scrollbar_bounds: tuple[float, float, float, float, int] | None = None
+        self.results_scrollbar_bounds: tuple[float, float, float, float, int, float, float, float] | None = None
+        self.category_scroll = 0
+        self.category_scroll_bounds: tuple[float, float, float, float, int] | None = None
+        self.category_scrollbar_bounds: tuple[float, float, float, float, int, float, float, float] | None = None
+        self.scroll_drag: dict | None = None
+        self._search_area_bottom = 120
+        self._category_container_geom: dict | None = None
+        self.download_col_status_w = 110
+        self.download_col_date_w = 132
+        self.download_col_size_w = 80
+        self.download_col_resize_handles: list[dict] = []
+        self.download_data_scroll = 0
+        self.download_data_scroll_bounds: tuple[float, float, float, float, int] | None = None
+        self.download_data_scrollbar_bounds: tuple[float, float, float, float, int, float, float, float] | None = None
 
         self.search_entry = tk.Entry(
             self.root,
@@ -363,6 +376,8 @@ class BookDownloaderApp:
 
         self.canvas.bind("<Configure>", lambda _event: self.draw())
         self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<B1-Motion>", self._on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self._on_release)
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", self._on_mousewheel)
         self.canvas.bind("<Button-5>", self._on_mousewheel)
@@ -527,6 +542,14 @@ class BookDownloaderApp:
     def _reset_results_scroll(self) -> None:
         self.results_scroll = 0
 
+    def _category_chips_metrics(self) -> tuple[list[tuple[str, float]], float]:
+        chips: list[tuple[str, float]] = []
+        for category in CATEGORIES:
+            chip_w = max(32, self.fonts["body_small"].measure(category) + 24)
+            chips.append((category, chip_w))
+        total_w = sum(chip_w for _, chip_w in chips) + max(0, (len(chips) - 1) * 8)
+        return chips, total_w
+
     def _apply_theme(self) -> None:
         palette = LIGHT_COLORS if self.theme_mode == "light" else DARK_COLORS
         COLORS.clear()
@@ -635,12 +658,75 @@ class BookDownloaderApp:
             self.draw()
 
     def _on_click(self, event: tk.Event) -> None:
+        if self.category_scrollbar_bounds:
+            x1, y1, x2, y2, max_scroll, thumb_x, thumb_w, track_w = self.category_scrollbar_bounds
+            if max_scroll > 0 and y1 <= event.y <= y2:
+                if thumb_x <= event.x <= thumb_x + thumb_w:
+                    self.scroll_drag = {
+                        "kind": "category",
+                        "start_mouse": event.x,
+                        "start_scroll": self.category_scroll,
+                        "thumb_size": thumb_w,
+                        "track_size": track_w,
+                        "max_scroll": max_scroll,
+                    }
+                    return
+                if x1 <= event.x <= x2:
+                    ratio = (event.x - x1) / max(1, x2 - x1)
+                    self.category_scroll = max(0, min(max_scroll, round(ratio * max_scroll)))
+                    self.draw()
+                    return
+
         if self.results_scrollbar_bounds:
-            x1, y1, x2, y2, max_scroll = self.results_scrollbar_bounds
-            if x1 <= event.x <= x2 and y1 <= event.y <= y2 and max_scroll > 0:
-                ratio = (event.y - y1) / max(1, y2 - y1)
-                self.results_scroll = max(0, min(max_scroll, round(ratio * max_scroll)))
-                self.draw()
+            x1, y1, x2, y2, max_scroll, thumb_y, thumb_h, track_h = self.results_scrollbar_bounds
+            if max_scroll > 0 and x1 <= event.x <= x2:
+                if thumb_y <= event.y <= thumb_y + thumb_h:
+                    self.scroll_drag = {
+                        "kind": "results",
+                        "start_mouse": event.y,
+                        "start_scroll": self.results_scroll,
+                        "thumb_size": thumb_h,
+                        "track_size": track_h,
+                        "max_scroll": max_scroll,
+                    }
+                    return
+                if y1 <= event.y <= y2:
+                    ratio = (event.y - y1) / max(1, y2 - y1)
+                    self.results_scroll = max(0, min(max_scroll, round(ratio * max_scroll)))
+                    self.draw()
+                    return
+
+        if self.download_data_scrollbar_bounds:
+            x1, y1, x2, y2, max_scroll, thumb_x, thumb_w, track_w = self.download_data_scrollbar_bounds
+            if max_scroll > 0 and y1 <= event.y <= y2:
+                if thumb_x <= event.x <= thumb_x + thumb_w:
+                    self.scroll_drag = {
+                        "kind": "download_data",
+                        "start_mouse": event.x,
+                        "start_scroll": self.download_data_scroll,
+                        "thumb_size": thumb_w,
+                        "track_size": track_w,
+                        "max_scroll": max_scroll,
+                    }
+                    return
+                if x1 <= event.x <= x2:
+                    ratio = (event.x - x1) / max(1, x2 - x1)
+                    self.download_data_scroll = max(0, min(max_scroll, round(ratio * max_scroll)))
+                    self.draw()
+                    return
+
+        for handle in self.download_col_resize_handles:
+            if handle["x1"] <= event.x <= handle["x2"] and handle["y1"] <= event.y <= handle["y2"]:
+                self.scroll_drag = {
+                    "kind": "col_resize",
+                    "start_mouse": event.x,
+                    "col_a": handle["col_a"],
+                    "col_b": handle["col_b"],
+                    "start_a": getattr(self, f"download_col_{handle['col_a']}_w"),
+                    "start_b": getattr(self, f"download_col_{handle['col_b']}_w"),
+                    "min_a": handle["min_a"],
+                    "min_b": handle["min_b"],
+                }
                 return
 
         for button in reversed(self.buttons):
@@ -648,20 +734,79 @@ class BookDownloaderApp:
                 self._handle_action(button["action"], button["payload"])
                 return
 
+    def _on_drag(self, event: tk.Event) -> None:
+        if not self.scroll_drag:
+            return
+
+        drag = self.scroll_drag
+        travel = max(1, drag["track_size"] - drag["thumb_size"])
+        if drag["kind"] == "category":
+            delta = event.x - drag["start_mouse"]
+            next_scroll = drag["start_scroll"] + delta * drag["max_scroll"] / travel
+            next_scroll = max(0, min(drag["max_scroll"], round(next_scroll)))
+            if next_scroll != self.category_scroll:
+                self.category_scroll = next_scroll
+                self.draw()
+        elif drag["kind"] == "results":
+            delta = event.y - drag["start_mouse"]
+            next_scroll = drag["start_scroll"] + delta * drag["max_scroll"] / travel
+            next_scroll = max(0, min(drag["max_scroll"], round(next_scroll)))
+            if next_scroll != self.results_scroll:
+                self.results_scroll = next_scroll
+                self.draw()
+        elif drag["kind"] == "download_data":
+            delta = event.x - drag["start_mouse"]
+            next_scroll = drag["start_scroll"] + delta * drag["max_scroll"] / travel
+            next_scroll = max(0, min(drag["max_scroll"], round(next_scroll)))
+            if next_scroll != self.download_data_scroll:
+                self.download_data_scroll = next_scroll
+                self.draw()
+        elif drag["kind"] == "col_resize":
+            delta = round(event.x - drag["start_mouse"])
+            new_a = drag["start_a"] + delta
+            new_b = drag["start_b"] - delta
+            if new_a >= drag["min_a"] and new_b >= drag["min_b"]:
+                setattr(self, f"download_col_{drag['col_a']}_w", new_a)
+                setattr(self, f"download_col_{drag['col_b']}_w", new_b)
+                self.draw()
+
+    def _on_release(self, _event: tk.Event) -> None:
+        self.scroll_drag = None
+
     def _on_mousewheel(self, event: tk.Event) -> str | None:
-        if not self.results_scroll_bounds:
-            return None
-
-        x1, y1, x2, y2, max_scroll = self.results_scroll_bounds
-        if not (x1 <= event.x <= x2 and y1 <= event.y <= y2) or max_scroll <= 0:
-            return None
-
         if getattr(event, "num", None) == 4:
             direction = -1
         elif getattr(event, "num", None) == 5:
             direction = 1
         else:
             direction = -1 if event.delta > 0 else 1
+
+        if self.category_scroll_bounds:
+            x1, y1, x2, y2, max_scroll = self.category_scroll_bounds
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2 and max_scroll > 0:
+                step = 40
+                next_scroll = max(0, min(max_scroll, self.category_scroll + direction * step))
+                if next_scroll != self.category_scroll:
+                    self.category_scroll = next_scroll
+                    self.draw()
+                return "break"
+
+        if self.download_data_scroll_bounds:
+            x1, y1, x2, y2, max_scroll = self.download_data_scroll_bounds
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2 and max_scroll > 0:
+                step = 40
+                next_scroll = max(0, min(max_scroll, self.download_data_scroll + direction * step))
+                if next_scroll != self.download_data_scroll:
+                    self.download_data_scroll = next_scroll
+                    self.draw()
+                return "break"
+
+        if not self.results_scroll_bounds:
+            return None
+
+        x1, y1, x2, y2, max_scroll = self.results_scroll_bounds
+        if not (x1 <= event.x <= x2 and y1 <= event.y <= y2) or max_scroll <= 0:
+            return None
 
         next_scroll = max(0, min(max_scroll, self.results_scroll + direction))
         if next_scroll != self.results_scroll:
@@ -670,6 +815,15 @@ class BookDownloaderApp:
         return "break"
 
     def _on_motion(self, event: tk.Event) -> None:
+        over_resize = any(
+            handle["x1"] <= event.x <= handle["x2"] and handle["y1"] <= event.y <= handle["y2"]
+            for handle in self.download_col_resize_handles
+        )
+        if over_resize:
+            if self.canvas.cget("cursor") != "sb_h_double_arrow":
+                self.canvas.configure(cursor="sb_h_double_arrow")
+            return
+
         next_hover: tuple[str, str | None] | None = None
         for button in reversed(self.buttons):
             if button["x1"] <= event.x <= button["x2"] and button["y1"] <= event.y <= button["y2"]:
@@ -775,6 +929,12 @@ class BookDownloaderApp:
         self.buttons = []
         self.results_scroll_bounds = None
         self.results_scrollbar_bounds = None
+        self.category_scroll_bounds = None
+        self.category_scrollbar_bounds = None
+        self._category_container_geom = None
+        self.download_col_resize_handles = []
+        self.download_data_scroll_bounds = None
+        self.download_data_scrollbar_bounds = None
 
         self._round_rect(1, 1, width - 2, height - 2, 10, fill=COLORS["app"], outline="#0f2538")
         self._draw_sidebar(height)
@@ -786,7 +946,6 @@ class BookDownloaderApp:
         gap = 12
         right_x = width - right_w - 14
         left_w = right_x - content_x - gap
-        panel_top = 120
         downloads_h = 226
         bottom_margin = 14
 
@@ -810,11 +969,22 @@ class BookDownloaderApp:
             self._draw_home(content_x + 10, content_y, left_w - 10, right_x, right_w, height - content_y - bottom_margin)
             return
 
-        self._draw_search(content_x + 10, content_y, left_w - 10, right_x, right_w)
+        search_x = content_x + 10
+        search_y = content_y
+        left_content_w = left_w - 10
+        category_y = search_y + 44 + 10
+        self._draw_category_container(search_x, category_y, left_content_w)
+
+        self._draw_sidebar(height)
+        self._draw_search_bar(search_x, search_y, left_content_w)
+        panel_top = category_y + self._category_container_height() + 10
+        self._search_area_bottom = category_y + self._category_container_height()
         results_h = max(342, height - panel_top - downloads_h - 24)
-        self._draw_results(content_x + 10, panel_top, left_w - 10, results_h)
-        self._draw_downloads(content_x + 10, panel_top + results_h + 10, left_w - 10, downloads_h)
+        self._draw_results(search_x, panel_top, left_content_w, results_h)
+        self._draw_downloads(search_x, panel_top + results_h + 10, left_content_w, downloads_h)
         self._draw_details(right_x, panel_top, right_w, height - panel_top - bottom_margin)
+        self._draw_category_side_masks()
+        self._draw_filter_button(right_x, right_w, category_y)
 
     def _draw_sidebar(self, height: float) -> None:
         sidebar_w = 195
@@ -849,9 +1019,13 @@ class BookDownloaderApp:
         self._round_rect(21, storage_y + 18, 88, storage_y + 23, 3, fill=COLORS["blue"], outline="")
         self._text(21, storage_y + 32, "18.4 ГБ / 50 ГБ", COLORS["text_soft"], "body_small")
 
-    def _draw_search(self, x: float, y: float, left_w: float, right_x: float, right_w: float) -> None:
+    def _category_container_height(self) -> float:
+        return 10 + 27 + 8 + 6 + 10
+
+    def _draw_search_bar(self, x: float, y: float, left_w: float) -> None:
         search_w = min(620, max(420, left_w - 10))
-        search_button_w = 168
+        search_label = self._t("search")
+        search_button_w = 36 + self.fonts["button"].measure(search_label) + 14
         search_h = 44
         self._round_rect(x, y, x + search_w, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
         self.search_entry.place(x=x + 16, y=y + 11, width=search_w - search_button_w - 24, height=22)
@@ -869,38 +1043,16 @@ class BookDownloaderApp:
             icon="⌕",
         )
 
-        chip_x = x
-        chip_y = y + 55
-        for category in CATEGORIES:
-            label = category
-            chip_w = max(32, self.fonts["body_small"].measure(label) + 24)
-            if chip_x + chip_w > x + left_w:
-                break
-            active = self.active_category == category
-            fill = COLORS["blue"] if active else COLORS["panel_alt"]
-            text_fill = COLORS["text"] if active else COLORS["text_soft"]
-            self._button(
-                chip_x,
-                chip_y,
-                chip_x + chip_w,
-                chip_y + 27,
-                label,
-                "category",
-                category,
-                fill=fill,
-                active_fill=COLORS["blue_dark"] if active else COLORS["panel_soft"],
-                text_fill=text_fill,
-                radius=7,
-                font="body_small",
-            )
-            chip_x += chip_w + 8
-
+    def _draw_filter_button(self, right_x: float, right_w: float, category_y: float) -> None:
         filter_label = "Фільтри" if not self.filter_open else "Фільтри: відкрито"
+        filter_h = 34
+        container_h = self._category_container_height()
+        filter_y = category_y + (container_h - filter_h) / 2
         self._button(
             right_x + 20,
-            y + 41,
+            filter_y,
             right_x + min(150, right_w - 16),
-            y + 75,
+            filter_y + filter_h,
             filter_label,
             "filter",
             fill=COLORS["panel_alt"],
@@ -908,6 +1060,109 @@ class BookDownloaderApp:
             radius=7,
             icon="≡",
         )
+
+    def _draw_category_side_masks(self) -> None:
+        if not self._category_container_geom:
+            return
+
+        geom = self._category_container_geom
+        side_w = 29
+        app = COLORS["app"]
+        chip_y = geom["chip_y"]
+        chip_y2 = chip_y + geom["chip_h"] + 1
+
+        self.canvas.create_rectangle(
+            geom["x"] - side_w,
+            chip_y,
+            geom["x"],
+            chip_y2,
+            fill=app,
+            outline="",
+        )
+        self.canvas.create_rectangle(
+            geom["x"] + geom["w"] + 1,
+            chip_y,
+            geom["x"] + geom["w"] + side_w + 50,
+            chip_y2,
+            fill=app,
+            outline="",
+        )
+
+    def _draw_category_container(self, x: float, y: float, w: float) -> float:
+        pad_x = 12
+        pad_y = 10
+        chip_h = 27
+        scroll_h = 6
+        scroll_gap = 8
+        container_h = self._category_container_height()
+
+        self._round_rect(x, y, x + w, y + container_h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
+
+        viewport_x = x + pad_x
+        viewport_w = w - pad_x * 2
+        chip_y = y + pad_y
+
+        chips, total_w = self._category_chips_metrics()
+        max_scroll = max(0, int(total_w - viewport_w))
+        self.category_scroll = max(0, min(self.category_scroll, max_scroll))
+        has_scroll = max_scroll > 0
+        self.category_scroll_bounds = (x, y, x + w, y + container_h, max_scroll)
+        self._category_container_geom = {
+            "x": x,
+            "y": y,
+            "w": w,
+            "h": container_h,
+            "viewport_x": viewport_x,
+            "viewport_w": viewport_w,
+            "chip_y": chip_y,
+            "chip_h": chip_h,
+        }
+
+        chip_x = viewport_x - self.category_scroll
+        for category, chip_w in chips:
+            chip_right = chip_x + chip_w
+            if chip_right > viewport_x and chip_x < viewport_x + viewport_w:
+                active = self.active_category == category
+                fill = COLORS["blue"] if active else COLORS["panel_alt"]
+                text_fill = COLORS["text"] if active else COLORS["text_soft"]
+                self._button(
+                    chip_x,
+                    chip_y,
+                    chip_x + chip_w,
+                    chip_y + chip_h,
+                    category,
+                    "category",
+                    category,
+                    fill=fill,
+                    active_fill=COLORS["blue_dark"] if active else COLORS["panel_soft"],
+                    text_fill=text_fill,
+                    radius=7,
+                    font="body_small",
+                )
+            chip_x += chip_w + 8
+
+        if has_scroll:
+            track_x1 = viewport_x
+            track_x2 = viewport_x + viewport_w
+            track_y1 = y + container_h - pad_y - scroll_h
+            track_y2 = track_y1 + scroll_h
+            track_w = max(1, track_x2 - track_x1)
+            thumb_w = max(28, track_w * viewport_w / total_w)
+            thumb_x = track_x1 + (track_w - thumb_w) * self.category_scroll / max(1, max_scroll)
+            self._round_rect(track_x1, track_y1, track_x2, track_y2, 3, fill=COLORS["line_soft"], outline="")
+            self._round_rect(thumb_x, track_y1, thumb_x + thumb_w, track_y2, 3, fill=COLORS["blue"], outline="")
+            self.category_scrollbar_bounds = (
+                track_x1,
+                track_y1 - 4,
+                track_x2,
+                track_y2 + 4,
+                max_scroll,
+                thumb_x,
+                thumb_w,
+                track_w,
+            )
+
+        return y + container_h
 
     def _draw_results(self, x: float, y: float, w: float, h: float) -> None:
         self._round_rect(x, y, x + w, y + h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
@@ -1009,7 +1264,16 @@ class BookDownloaderApp:
             thumb_y = track_y1 + (track_h - thumb_h) * self.results_scroll / max(1, max_scroll)
             self._round_rect(track_x, track_y1, track_x + 6, track_y2, 3, fill=COLORS["line_soft"], outline="")
             self._round_rect(track_x, thumb_y, track_x + 6, thumb_y + thumb_h, 3, fill=COLORS["blue"], outline="")
-            self.results_scrollbar_bounds = (track_x - 8, track_y1, track_x + 14, track_y2, max_scroll)
+            self.results_scrollbar_bounds = (
+                track_x - 8,
+                track_y1,
+                track_x + 14,
+                track_y2,
+                max_scroll,
+                thumb_y,
+                thumb_h,
+                track_h,
+            )
 
     def _draw_downloads(self, x: float, y: float, w: float, h: float) -> None:
         self._round_rect(x, y, x + w, y + h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
@@ -1030,17 +1294,270 @@ class BookDownloaderApp:
             }
         )
 
-        row_h = 54 if w - 28 < 760 else 44
-        max_rows = max(1, int((h - 50) // row_h))
         items = DOWNLOADS if h > 180 else DOWNLOADS[:4]
-        self._draw_download_rows(x + 14, y + 38, w - 28, max_rows * row_h, items[:max_rows])
+        self._draw_download_preview_rows(x + 14, y + 38, w - 28, h - 50, items)
+
+    def _download_preview_row_height(self, book: dict, title_col_w: float) -> int:
+        title_lines = self._wrap_text(book["title"], title_col_w - 4, "body_small")
+        author_lines = self._wrap_text(book["author"], title_col_w - 4, "caption")[:2]
+        title_lh = self._line_height("body_small")
+        author_lh = self._line_height("caption")
+        return max(54, int(6 + len(title_lines) * title_lh + 2 + len(author_lines) * author_lh + 8))
+
+    def _download_data_content_width(self) -> float:
+        gap = 8
+        return (
+            self.download_col_status_w
+            + gap
+            + self.download_col_date_w
+            + gap
+            + self.download_col_size_w
+            + gap
+            + 56
+        )
+
+    def _download_data_columns_at(self, data_x: float) -> dict[str, float | int]:
+        gap = 8
+        actions_w = 56
+        status_w = self.download_col_status_w
+        date_w = self.download_col_date_w
+        size_w = self.download_col_size_w
+        status_x1 = data_x
+        date_x1 = status_x1 + status_w + gap
+        size_x1 = date_x1 + date_w + gap
+        actions_x1 = size_x1 + size_w + gap
+        return {
+            "status_x1": status_x1,
+            "status_w": status_w,
+            "date_x1": date_x1,
+            "date_w": date_w,
+            "size_x1": size_x1,
+            "size_w": size_w,
+            "actions_x1": actions_x1,
+            "actions_w": actions_w,
+            "content_w": actions_x1 + actions_w - data_x,
+        }
+
+    def _download_preview_title_width(self, items: list[dict], panel_w: float) -> float:
+        if not items:
+            return 120
+        longest = max(
+            self.fonts["body_small"].measure(self._book_by_id(item["book_id"])["title"]) for item in items
+        )
+        return max(100, min(longest + 10, int(panel_w * 0.48)))
+
+    def _draw_download_preview_rows(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        items: list[dict],
+    ) -> None:
+        if not items:
+            return
+
+        cover_w = 44
+        title_x = x + cover_w
+        title_col_w = self._download_preview_title_width(items, w)
+        title_block_end = title_x + title_col_w
+        title_data_gap = 20
+        data_content_w = self._download_data_content_width()
+        data_viewport_w = max(100, x + w - title_block_end - title_data_gap)
+        data_viewport_x = x + w - data_viewport_w
+        if data_viewport_x < title_block_end + title_data_gap:
+            data_viewport_x = title_block_end + title_data_gap
+            data_viewport_w = max(80, x + w - data_viewport_x)
+        max_scroll = max(0, int(data_content_w - data_viewport_w))
+        self.download_data_scroll = max(0, min(self.download_data_scroll, max_scroll))
+        has_h_scroll = max_scroll > 0
+        scroll_bar_h = 8 if has_h_scroll else 0
+        self.download_data_scroll_bounds = (
+            data_viewport_x,
+            y,
+            data_viewport_x + data_viewport_w,
+            y + h,
+            max_scroll,
+        )
+
+        row_y = y
+        scroll = self.download_data_scroll
+        title_lh = self._line_height("body_small")
+        for index, item in enumerate(items):
+            book = self._book_by_id(item["book_id"])
+            is_done = item["progress"] >= 100
+            row_h = self._download_preview_row_height(book, title_col_w)
+            if row_y + row_h > y + h - scroll_bar_h:
+                break
+            top = row_y
+
+            if index > 0:
+                self.canvas.create_line(x, top - 3, x + w, top - 3, fill=COLORS["line_soft"])
+
+            self._draw_cover(x + 8, top + max(4, (row_h - 38) / 2), 28, 38, book, small=True)
+            title_lines = self._wrap_text(book["title"], title_col_w - 4, "body_small")
+            for line_i, line in enumerate(title_lines):
+                self._text(title_x, top + 6 + line_i * title_lh, line, COLORS["text"], "body_small", "nw")
+            author_y = top + 6 + len(title_lines) * title_lh + 2
+            author_lines = self._wrap_text(book["author"], title_col_w - 4, "caption")[:2]
+            author_lh = self._line_height("caption")
+            for line_i, line in enumerate(author_lines):
+                self._text(title_x, author_y + line_i * author_lh, line, COLORS["text_muted"], "caption", "nw")
+            self._draw_download_data_row(
+                item,
+                book,
+                data_viewport_x,
+                data_viewport_w,
+                data_content_w,
+                scroll,
+                top,
+                row_h,
+                is_done,
+                x + w,
+            )
+            self.canvas.create_rectangle(
+                x,
+                top,
+                data_viewport_x,
+                top + row_h,
+                fill=COLORS["panel"],
+                outline="",
+            )
+            self._draw_cover(x + 8, top + max(4, (row_h - 38) / 2), 28, 38, book, small=True)
+            for line_i, line in enumerate(title_lines):
+                self._text(title_x, top + 6 + line_i * title_lh, line, COLORS["text"], "body_small", "nw")
+            for line_i, line in enumerate(author_lines):
+                self._text(title_x, author_y + line_i * author_lh, line, COLORS["text_muted"], "caption", "nw")
+            row_y += row_h
+
+        if row_y > y:
+            self.canvas.create_line(
+                data_viewport_x,
+                y,
+                data_viewport_x,
+                min(row_y, y + h - scroll_bar_h),
+                fill=COLORS["line_soft"],
+            )
+
+        if has_h_scroll:
+            track_x1 = data_viewport_x
+            track_x2 = data_viewport_x + data_viewport_w
+            track_y1 = y + h - scroll_bar_h - 2
+            track_y2 = track_y1 + scroll_bar_h
+            track_w = max(1, track_x2 - track_x1)
+            thumb_w = max(28, track_w * data_viewport_w / data_content_w)
+            thumb_x = track_x1 + (track_w - thumb_w) * self.download_data_scroll / max(1, max_scroll)
+            self._round_rect(track_x1, track_y1, track_x2, track_y2, 3, fill=COLORS["line_soft"], outline="")
+            self._round_rect(thumb_x, track_y1, thumb_x + thumb_w, track_y2, 3, fill=COLORS["blue"], outline="")
+            self.download_data_scrollbar_bounds = (
+                track_x1,
+                track_y1 - 4,
+                track_x2,
+                track_y2 + 4,
+                max_scroll,
+                thumb_x,
+                thumb_w,
+                track_w,
+            )
+
+    def _draw_download_data_row(
+        self,
+        item: dict,
+        book: dict,
+        viewport_x: float,
+        viewport_w: float,
+        content_w: float,
+        scroll: float,
+        top: float,
+        row_h: float,
+        is_done: bool,
+        panel_right: float,
+    ) -> None:
+        data_x = viewport_x - scroll
+        cols = self._download_data_columns_at(data_x)
+        data_right = data_x + content_w
+
+        if data_right > viewport_x and data_x < viewport_x + viewport_w:
+            status_color = COLORS["text_soft"] if is_done else COLORS["blue"]
+            status_y = top + (row_h / 2)
+            if cols["status_x1"] + cols["status_w"] > viewport_x and cols["status_x1"] < viewport_x + viewport_w:
+                self._text(cols["status_x1"], status_y, "●", status_color, "body_small", "w")
+                self._text_fit(
+                    cols["status_x1"] + 14,
+                    status_y,
+                    item["status"],
+                    status_color,
+                    "caption",
+                    "w",
+                    cols["status_w"] - 18,
+                )
+
+            if is_done and item.get("date"):
+                if cols["date_x1"] + cols["date_w"] > viewport_x and cols["date_x1"] < viewport_x + viewport_w:
+                    self._text_fit(
+                        cols["date_x1"],
+                        status_y,
+                        item["date"],
+                        COLORS["text_muted"],
+                        "caption",
+                        "w",
+                        cols["date_w"],
+                    )
+
+            size_x = cols["size_x1"] + cols["size_w"]
+            if cols["size_x1"] < viewport_x + viewport_w and size_x > viewport_x:
+                self._text_fit(
+                    size_x,
+                    top + 8,
+                    item["size"],
+                    COLORS["text_muted"],
+                    "caption",
+                    "e",
+                    cols["size_w"],
+                )
+
+            if not is_done:
+                bar_x1 = cols["status_x1"] + 14
+                if bar_x1 + 120 > viewport_x and bar_x1 < viewport_x + viewport_w:
+                    self._round_rect(bar_x1, top + row_h - 16, bar_x1 + 92, top + row_h - 12, 3, fill="#132741", outline="")
+                    progress_w = 92 * item["progress"] / 100
+                    self._round_rect(bar_x1, top + row_h - 16, bar_x1 + progress_w, top + row_h - 12, 3, fill=COLORS["blue"], outline="")
+                    self._text(bar_x1 + 98, top + 8, f"{item['progress']}%", COLORS["text_muted"], "caption")
+
+            actions_x1 = cols["actions_x1"]
+            if actions_x1 + cols["actions_w"] > viewport_x and actions_x1 < viewport_x + viewport_w:
+                btn_x1 = max(viewport_x, actions_x1)
+                btn_x2 = min(viewport_x + viewport_w, actions_x1 + cols["actions_w"])
+                self._text(actions_x1 + 8, top + row_h / 2, "□", COLORS["text_muted"], "body_small", "center")
+                pause_or_close = "Ⅱ" if not is_done else "×"
+                self._text(actions_x1 + 40, top + row_h / 2, pause_or_close, COLORS["text_muted"], "body", "center")
+                self.buttons.append(
+                    {
+                        "x1": btn_x1,
+                        "y1": top,
+                        "x2": btn_x2,
+                        "y2": top + row_h - 4,
+                        "action": "remove_download",
+                        "payload": book["id"],
+                    }
+                )
+
+        if viewport_x + viewport_w < panel_right:
+            self.canvas.create_rectangle(
+                viewport_x + viewport_w,
+                top,
+                panel_right,
+                top + row_h,
+                fill=COLORS["panel"],
+                outline="",
+            )
 
     def _download_columns(self, x: float, w: float) -> dict[str, float | int]:
         actions_w = 56
-        size_w = 68
-        date_w = 86
-        status_w = 96
         gap = 8
+        size_w = self.download_col_size_w
+        date_w = self.download_col_date_w
+        status_w = self.download_col_status_w
         right = x + w
         size_x2 = right - actions_w
         size_x1 = size_x2 - size_w
@@ -1062,9 +1579,46 @@ class BookDownloaderApp:
             "actions_x1": size_x2,
         }
 
-    def _draw_download_rows(self, x: float, y: float, w: float, _h: float, items: list[dict]) -> None:
+    def _draw_download_table_header(self, x: float, y: float, w: float) -> None:
+        cols = self._download_columns(x, w)
+        self._text(cols["status_x1"], y + 2, "Статус", COLORS["text_muted"], "caption")
+        self._text(cols["date_x1"], y + 2, "Дата", COLORS["text_muted"], "caption")
+        self._text(cols["size_x1"], y + 2, "Розмір", COLORS["text_muted"], "caption")
+        self.canvas.create_line(x, y + 18, x + w, y + 18, fill=COLORS["line_soft"])
+
+        gap = 8
+        boundaries = [
+            (cols["date_x1"] - gap // 2, "status", "date", 72, 80),
+            (cols["size_x1"] - gap // 2, "date", "size", 80, 56),
+        ]
+        for boundary, col_a, col_b, min_a, min_b in boundaries:
+            handle_half = 4
+            self.canvas.create_line(boundary, y, boundary, y + 18, fill=COLORS["line"], width=1)
+            self.download_col_resize_handles.append(
+                {
+                    "x1": boundary - handle_half,
+                    "y1": y,
+                    "x2": boundary + handle_half,
+                    "y2": y + 20,
+                    "col_a": col_a,
+                    "col_b": col_b,
+                    "min_a": min_a,
+                    "min_b": min_b,
+                }
+            )
+
+    def _draw_download_rows(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        _h: float,
+        items: list[dict],
+        *,
+        table_mode: bool = False,
+    ) -> None:
         row_y = y
-        compact = w < 760
+        compact = w < 760 and not table_mode
         row_h = 54 if compact else 44
         cols = self._download_columns(x, w)
         for index, item in enumerate(items):
@@ -1087,8 +1641,6 @@ class BookDownloaderApp:
                     cols["text_max"],
                 )
                 secondary = book["author"]
-                if item["date"]:
-                    secondary = f"{book['author']}  •  {item['date']}"
                 self._text_fit(
                     cols["text_start"],
                     top + 22,
@@ -1118,6 +1670,16 @@ class BookDownloaderApp:
                     "w",
                     cols["status_w"] - 18,
                 )
+                if is_done and item.get("date"):
+                    self._text_fit(
+                        cols["date_x1"],
+                        top + 22,
+                        item["date"],
+                        COLORS["text_muted"],
+                        "caption",
+                        "w",
+                        cols["date_w"],
+                    )
             else:
                 self._text_fit(
                     cols["text_start"],
@@ -1148,15 +1710,16 @@ class BookDownloaderApp:
                     "w",
                     cols["status_w"] - 18,
                 )
-                self._text_fit(
-                    cols["date_x1"],
-                    top + 12,
-                    item["date"],
-                    COLORS["text_muted"],
-                    "caption",
-                    "w",
-                    cols["date_w"],
-                )
+                if is_done and item.get("date"):
+                    self._text_fit(
+                        cols["date_x1"],
+                        top + (10 if table_mode else 12),
+                        item["date"],
+                        COLORS["text_soft"],
+                        "body_small" if table_mode else "caption",
+                        "w",
+                        cols["date_w"],
+                    )
                 self._text_fit(
                     cols["size_x1"] + cols["size_w"],
                     top + 12,
@@ -1381,7 +1944,12 @@ class BookDownloaderApp:
     def _draw_full_history(self, x: float, y: float, w: float, h: float) -> None:
         self._round_rect(x, y, x + w, y + h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
         self._text(x + 14, y + 14, self._t("full_history"), COLORS["text"], "section")
-        self._draw_download_rows(x + 14, y + 42, w - 28, h - 56, DOWNLOADS)
+        table_x = x + 14
+        table_w = w - 28
+        header_y = y + 40
+        rows_y = y + 62
+        self._draw_download_table_header(table_x, header_y, table_w)
+        self._draw_download_rows(table_x, rows_y, table_w, h - 76, DOWNLOADS, table_mode=True)
 
     def _draw_settings(self, x: float, y: float, w: float, h: float) -> None:
         self._round_rect(x, y, x + w, y + h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
