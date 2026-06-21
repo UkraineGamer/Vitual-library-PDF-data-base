@@ -1,11 +1,9 @@
-from fileinput import filename
 from pymongo import MongoClient
 from gridfs import GridFS
 from dotenv import load_dotenv
 from pathlib import Path
 import os
 
-from pymongo.synchronous import collection
 
 class Books_open:
     def __init__(self):
@@ -14,6 +12,7 @@ class Books_open:
         self.client = None
         self.db = None
         self.fs = None
+        self.files_collection = None
 
     def get_uri(self):
         load_dotenv(Path("secure.env"))
@@ -31,19 +30,30 @@ class Books_open:
         db_name = db_name or os.getenv("MONGO_DB", "library")
         self.db = self.client[db_name]
         self.fs = GridFS(self.db)
+        self.files_collection = self.db["books"]
         return self.db
 
     def file_gfs_upload(self):
-        fs = self.fs
-        file_directory = str(input("Будь ласка, вставте сюди назву вашого файлу: "))
-        name = file_directory.split(".")[0]
-        with open(f"{name}.pdf", "rb") as f:
-            file_id = fs.put(
-                f,
-                filename=f"{name}.pdf"
-            )
+        if self.fs is None or self.files_collection is None:
+            self.connect_mongodb()
+        assert self.fs is not None and self.files_collection is not None
+
+        file_path = Path(
+            input("Будь ласка, вставте сюди назву вашого файлу: ").strip().strip('"')
+        )
+        if not file_path.exists():
+            raise FileNotFoundError(f"Файл не знайдено: {file_path.resolve()}")
+
+        with file_path.open("rb") as f:
+            file_id = self.fs.put(f, filename=file_path.name)
+
         file_saved = {
-            id: file_id,
-            name: f"{name}.pdf"
+            "file_id": file_id,
+            "filename": file_path.name,
         }
-        collection.insert_one(file_saved)    
+        result = self.files_collection.insert_one(file_saved)
+        return result.inserted_id
+
+db = Books_open()
+db.connect_mongodb()
+db.file_gfs_upload()
