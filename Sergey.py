@@ -412,8 +412,8 @@ class BookDownloaderApp:
         return {
             "brand": tkfont.Font(family="Segoe UI", size=10, weight="bold"),
             "nav": tkfont.Font(family="Segoe UI", size=10),
-            "body": tkfont.Font(family="Segoe UI", size=10),
-            "body_small": tkfont.Font(family="Segoe UI", size=9),
+            "body": tkfont.Font(family="Segoe UI", size=15),
+            "body_small": tkfont.Font(family="Segoe UI", size=10),
             "caption": tkfont.Font(family="Segoe UI", size=8),
             "section": tkfont.Font(family="Segoe UI Semibold", size=11),
             "title": tkfont.Font(family="Segoe UI Semibold", size=13),
@@ -1012,7 +1012,7 @@ class BookDownloaderApp:
         self.canvas.create_line(sidebar_w, 0, sidebar_w, height, fill="#0f2438")
 
         self._round_rect(17, 19, 34, 36, 4, fill=COLORS["blue"], outline="")
-        self._text(25.5, 27.5, "▥", "#d9efff", "caption", "center")
+        self._text(24.5, 25.5, "▥", "#d9efff", "caption", "center")
         self._text(44, 20, "BookDownloader", COLORS["text"], "brand")
 
         y = 64
@@ -1031,7 +1031,7 @@ class BookDownloaderApp:
             self.buttons.append(
                 {"x1": 9, "y1": y, "x2": sidebar_w - 10, "y2": y + row_h, "action": "nav", "payload": label}
             )
-            y += 42
+            y += 52
 
         storage_y = height - 64
         self._text(21, storage_y, "Сховище", COLORS["text_soft"], "body_small")
