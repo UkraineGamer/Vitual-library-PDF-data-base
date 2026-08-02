@@ -139,6 +139,26 @@ class BookSearch:
 
 BOOKS = [
     {
+        "id": "cat",
+        "title": "Котик :3",
+        "author": "Невідомий автор",
+        "meta": "Ілюстрація",
+        "categories": ["Усі"],
+        "pages": 1,
+        "isbn": "—",
+        "format": "JPG",
+        "size": "—",
+        "rating": "0",
+        "reviews": "0",
+        "language": "Українська",
+        "date": "—",
+        "publisher": "—",
+        "description": "Фото котика.",
+        "cover_bg": "#191613",
+        "cover_accent": "#f2d17b",
+        "cover_image": "Кото-подушка.png",
+    },
+    {
         "id": "1984",
         "title": "1984",
         "author": "Джордж Орвелл",
@@ -2053,6 +2073,23 @@ class BookDownloaderApp:
             self._text(x + w / 2, y + h * 0.28, "КОРОТКА", accent, "caption", "center")
             self._text(x + w / 2, y + h * 0.45, "ІСТОРІЯ", accent, "caption", "center")
             self.canvas.create_oval(x + w * 0.28, y + h * 0.58, x + w * 0.72, y + h * 0.82, outline=accent)
+
+        path = book.get("cover_image")
+        if path:
+            from pathlib import Path
+            from PIL import Image, ImageTk
+            image_path = Path(__file__).resolve().parent / path
+            if image_path.is_file():
+                with Image.open(image_path) as source:
+                    image = source.convert("RGBA").resize(
+                        (max(1, round(w)), max(1, round(h))), Image.Resampling.LANCZOS
+                    )
+                photo = ImageTk.PhotoImage(image)
+                if not hasattr(self, "_cover_refs"):
+                    self._cover_refs = []
+                self._cover_refs.append(photo)
+                self.canvas.create_image(x, y, image=photo, anchor="nw")
+            
 
     def _trim(self, text: str, max_width: float, font: str = "body") -> str:
         text = str(text)
