@@ -305,13 +305,13 @@ DOWNLOADS = [
 
 
 SIDEBAR_ITEMS = [
-    ("⌂", "Головна"),
-    ("⌕", "Пошук книг"),
-    ("⇩", "Завантаження"),
-    ("◷", "Історія"),
-    ("▥", "Бібліотека"),
-    ("♡", "Обране"),
-    ("⚙", "Налаштування"),
+    ("🏠", "Головна"),
+    ("🔎", "Пошук книг"),
+    ("📥", "Завантаження"),
+    ("🕒", "Історія"),
+    ("📚", "Бібліотека"),
+    ("💖", "Обране"),
+    ("⚙️", "Налаштування"),
 ]
 
 
@@ -412,7 +412,7 @@ class BookDownloaderApp:
         return {
             "brand": tkfont.Font(family="Segoe UI", size=10, weight="bold"),
             "nav": tkfont.Font(family="Segoe UI", size=10),
-            "body": tkfont.Font(family="Segoe UI", size=15),
+            "body": tkfont.Font(family="Segoe UI", size=13),
             "body_small": tkfont.Font(family="Segoe UI", size=10),
             "caption": tkfont.Font(family="Segoe UI", size=8),
             "section": tkfont.Font(family="Segoe UI Semibold", size=11),
@@ -1047,12 +1047,12 @@ class BookDownloaderApp:
         search_label = self._t("search")
         search_button_w = 36 + self.fonts["button"].measure(search_label) + 14
         search_h = 44
-        self._round_rect(x, y, x + search_w, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
-        self.search_entry.place(x=x + 16, y=y + 11, width=search_w - search_button_w - 24, height=22)
+        self._round_rect(x, y, x + search_w + 400, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
+        self.search_entry.place(x=x + 16, y=y + 11, width=search_w + 275, height=22)
         self._button(
-            x + search_w - search_button_w,
+            x + search_w + 300,
             y + 1,
-            x + search_w,
+            x + search_w + 400,
             y + search_h - 1,
             self._t("search"),
             "search",
@@ -1069,9 +1069,9 @@ class BookDownloaderApp:
         container_h = self._category_container_height()
         filter_y = category_y + (container_h - filter_h) / 2
         self._button(
-            right_x + 20,
+            right_x - 150,
             filter_y,
-            right_x + min(150, right_w - 16),
+            right_x + min(-20, right_w - 16),
             filter_y + filter_h,
             filter_label,
             "filter",
@@ -1796,7 +1796,7 @@ class BookDownloaderApp:
         for i, line in enumerate(detail_lines):
             self._text_fit(info_x, detail_y + i * detail_gap, line, COLORS["text_soft"], "body_small", "w", info_max_w)
 
-        self._text(info_x, cover_y + 164, "★★★★★", COLORS["yellow"], "body")
+        self._text(info_x, cover_y + 150, "★★★★★", COLORS["yellow"], "body")
         self._text_fit(
             info_x,
             cover_y + 186,
