@@ -2097,7 +2097,7 @@ class BookDownloaderApp:
             active_fill=COLORS["blue_dark"] if medium_active else "#1c334d",
             radius=6,
         )
-        
+
         self._button(
             x + 224,
             font_y,
