@@ -2,7 +2,11 @@ import tkinter as tk
 from tkinter import font as tkfont
 import requests
 from tkinter import filedialog
+from typing import Literal
 from urllib.parse import quote
+
+TextAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
+TextJustify = Literal["left", "center", "right"]
 
 
 COLORS = {
@@ -313,13 +317,13 @@ DOWNLOADS = [
 
 
 SIDEBAR_ITEMS = [
-    ("⌂", "Головна"),
-    ("⌕", "Пошук книг"),
-    ("⇩", "Завантаження"),
-    ("◷", "Історія"),
-    ("▥", "Бібліотека"),
-    ("♡", "Обране"),
-    ("⚙", "Налаштування"),
+    ("🏠", "Головна"),
+    ("🔎", "Пошук книг"),
+    ("📥", "Завантаження"),
+    ("🕒", "Історія"),
+    ("📚", "Бібліотека"),
+    ("💖", "Обране"),
+    ("⚙️", "Налаштування"),
 ]
 
 
@@ -421,8 +425,8 @@ class BookDownloaderApp:
         return {
             "brand": tkfont.Font(family="Segoe UI", size=10, weight="bold"),
             "nav": tkfont.Font(family="Segoe UI", size=10),
-            "body": tkfont.Font(family="Segoe UI", size=10),
-            "body_small": tkfont.Font(family="Segoe UI", size=9),
+            "body": tkfont.Font(family="Segoe UI", size=13),
+            "body_small": tkfont.Font(family="Segoe UI", size=10),
             "caption": tkfont.Font(family="Segoe UI", size=8),
             "section": tkfont.Font(family="Segoe UI Semibold", size=11),
             "title": tkfont.Font(family="Segoe UI Semibold", size=13),
@@ -503,20 +507,20 @@ class BookDownloaderApp:
         text: str,
         fill: str = COLORS["text"],
         font: str = "body",
-        anchor: str = "nw",
+        anchor: TextAnchor = "nw",
         width: float | None = None,
-        justify: str = "left",
+        justify: TextJustify = "left",
     ) -> int:
-        return self.canvas.create_text(
-            x,
-            y,
-            text=text,
-            fill=fill,
-            font=self.fonts[font],
-            anchor=anchor,
-            width=width,
-            justify=justify,
-        )
+        kwargs = {
+            "text": text,
+            "fill": fill,
+            "font": self.fonts[font],
+            "anchor": anchor,
+            "justify": justify,
+        }
+        if width is not None:
+            kwargs["width"] = width
+        return self.canvas.create_text(x, y, **kwargs)
 
     def _button(
         self,
@@ -1042,7 +1046,7 @@ class BookDownloaderApp:
         self.canvas.create_line(sidebar_w, 0, sidebar_w, height, fill="#0f2438")
 
         self._round_rect(17, 19, 34, 36, 4, fill=COLORS["blue"], outline="")
-        self._text(25.5, 27.5, "▥", "#d9efff", "caption", "center")
+        self._text(24.5, 25.5, "▥", "#d9efff", "caption", "center")
         self._text(44, 20, "BookDownloader", COLORS["text"], "brand")
 
         y = 64
@@ -1061,7 +1065,7 @@ class BookDownloaderApp:
             self.buttons.append(
                 {"x1": 9, "y1": y, "x2": sidebar_w - 10, "y2": y + row_h, "action": "nav", "payload": label}
             )
-            y += 42
+            y += 52
 
         storage_y = height - 64
         self._text(21, storage_y, "Сховище", COLORS["text_soft"], "body_small")
@@ -1077,12 +1081,12 @@ class BookDownloaderApp:
         search_label = self._t("search")
         search_button_w = 36 + self.fonts["button"].measure(search_label) + 14
         search_h = 44
-        self._round_rect(x, y, x + search_w, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
-        self.search_entry.place(x=x + 16, y=y + 11, width=search_w - search_button_w - 24, height=22)
+        self._round_rect(x, y, x + search_w + 400, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
+        self.search_entry.place(x=x + 16, y=y + 11, width=search_w + 275, height=22)
         self._button(
-            x + search_w - search_button_w,
+            x + search_w + 300,
             y + 1,
-            x + search_w,
+            x + search_w + 400,
             y + search_h - 1,
             self._t("search"),
             "search",
@@ -1099,9 +1103,9 @@ class BookDownloaderApp:
         container_h = self._category_container_height()
         filter_y = category_y + (container_h - filter_h) / 2
         self._button(
-            right_x + 20,
+            right_x - 150,
             filter_y,
-            right_x + min(150, right_w - 16),
+            right_x + min(-20, right_w - 16),
             filter_y + filter_h,
             filter_label,
             "filter",
@@ -1826,7 +1830,7 @@ class BookDownloaderApp:
         for i, line in enumerate(detail_lines):
             self._text_fit(info_x, detail_y + i * detail_gap, line, COLORS["text_soft"], "body_small", "w", info_max_w)
 
-        self._text(info_x, cover_y + 164, "★★★★★", COLORS["yellow"], "body")
+        self._text(info_x, cover_y + 150, "★★★★★", COLORS["yellow"], "body")
         self._text_fit(
             info_x,
             cover_y + 186,
@@ -2187,7 +2191,7 @@ class BookDownloaderApp:
         text: str,
         fill: str,
         font: str,
-        anchor: str,
+        anchor: TextAnchor,
         max_width: float,
     ) -> int:
         return self._text(x, y, self._trim(text, max_width, font), fill, font, anchor)
