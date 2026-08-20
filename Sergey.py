@@ -1,3 +1,4 @@
+from logging import root
 import tkinter as tk
 from tkinter import font as tkfont
 import requests
@@ -60,6 +61,10 @@ UI_STRINGS = {
         "theme": "Тема оформлення",
         "dark_theme": "Темна",
         "light_theme": "Світла",
+        "font_size": "Розмір шрифту",
+        "small": "Малий",
+        "medium": "Середній",
+        "large": "Великий",
         "nav_home": "Головна",
         "nav_search": "Пошук книг",
         "nav_downloads": "Завантаження",
@@ -79,6 +84,10 @@ UI_STRINGS = {
         "theme": "Theme",
         "dark_theme": "Dark",
         "light_theme": "Light",
+        "font_size": "Font size",
+        "small": "Small",
+        "medium": "Medium",
+        "large": "Large",
         "nav_home": "Home",
         "nav_search": "Book search",
         "nav_downloads": "Downloads",
@@ -359,6 +368,7 @@ class BookDownloaderApp:
         self.description_expanded = False
         self.interface_language = "uk"
         self.theme_mode = "dark"
+        self.font_size = 10
         self.placeholder_active = True
         self.api_results: list[dict] | None = None
         self.extra_books: dict[str, dict] = {}
@@ -2030,6 +2040,50 @@ class BookDownloaderApp:
             "light",
             fill=COLORS["blue"] if light_active else COLORS["panel_soft"],
             active_fill=COLORS["blue_dark"] if light_active else "#1c334d",
+            radius=6,
+        )
+
+        self._text(x + 20, y + 288, self._t("font_size"), COLORS["text_soft"], "section")
+        font_y = y + 322
+        small_active = self.font_size == "small"
+        medium_active = self.font_size == "medium"
+        large_active = self.font_size == "large"
+        self._button(
+            x + 20,
+            font_y,
+            x + 100,
+            font_y + 36,
+            self._t("small"),
+            "set_font_size",
+            "small",
+            fill=COLORS["blue"] if small_active else COLORS["panel_soft"],
+            active_fill=COLORS["blue_dark"] if small_active else "#1c334d",
+            radius=6,
+        )
+
+        self._button(
+            x + 120,
+            font_y,
+            x + 200,
+            font_y + 36,
+            self._t("medium"),
+            "set_font_size",
+            "medium",
+            fill=COLORS["blue"] if medium_active else COLORS["panel_soft"],
+            active_fill=COLORS["blue_dark"] if medium_active else "#1c334d",
+            radius=6,
+        )
+        
+        self._button(
+            x + 224,
+            font_y,
+            x + 304,
+            font_y + 36,
+            self._t("large"),
+            "set_font_size",
+            "large",
+            fill=COLORS["blue"] if large_active else COLORS["panel_soft"],
+            active_fill=COLORS["blue_dark"] if large_active else "#1c334d",
             radius=6,
         )
 
