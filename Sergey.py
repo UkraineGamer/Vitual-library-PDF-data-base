@@ -1088,6 +1088,7 @@ class BookDownloaderApp:
         geom = self._category_container_geom
         side_w = 29
         app = COLORS["app"]
+        panel = COLORS["panel"]
         chip_y = geom["chip_y"]
         chip_y2 = chip_y + geom["chip_h"] + 1
 
@@ -1100,11 +1101,11 @@ class BookDownloaderApp:
             outline="",
         )
         self.canvas.create_rectangle(
-            geom["x"] + geom["w"] + 1,
+            geom["x"] + geom["w"] - 153,
             chip_y,
-            geom["x"] + geom["w"] + side_w + 50,
+            geom["x"] + geom["w"] - side_w,
             chip_y2,
-            fill=app,
+            fill= panel,
             outline="",
         )
 
@@ -1123,7 +1124,7 @@ class BookDownloaderApp:
         chip_y = y + pad_y
 
         chips, total_w = self._category_chips_metrics()
-        max_scroll = max(0, int(total_w - viewport_w))
+        max_scroll = max(0, int(total_w - viewport_w + 140))
         self.category_scroll = max(0, min(self.category_scroll, max_scroll))
         has_scroll = max_scroll > 0
         self.category_scroll_bounds = (x, y, x + w, y + container_h, max_scroll)
@@ -1141,7 +1142,7 @@ class BookDownloaderApp:
         chip_x = viewport_x - self.category_scroll
         for category, chip_w in chips:
             chip_right = chip_x + chip_w
-            if chip_right > viewport_x and chip_x < viewport_x + viewport_w:
+            if chip_right > viewport_x and chip_x < viewport_x + viewport_w - 120:
                 active = self.active_category == category
                 fill = COLORS["blue"] if active else COLORS["panel_alt"]
                 text_fill = COLORS["text"] if active else COLORS["text_soft"]
@@ -1163,11 +1164,11 @@ class BookDownloaderApp:
 
         if has_scroll:
             track_x1 = viewport_x
-            track_x2 = viewport_x + viewport_w
+            track_x2 = viewport_x + viewport_w - 150
             track_y1 = y + container_h - pad_y - scroll_h
             track_y2 = track_y1 + scroll_h
             track_w = max(1, track_x2 - track_x1)
-            thumb_w = max(28, track_w * viewport_w / total_w)
+            thumb_w = max(28, track_w * viewport_w / total_w - 100)
             thumb_x = track_x1 + (track_w - thumb_w) * self.category_scroll / max(1, max_scroll)
             self._round_rect(track_x1, track_y1, track_x2, track_y2, 3, fill=COLORS["line_soft"], outline="")
             self._round_rect(thumb_x, track_y1, thumb_x + thumb_w, track_y2, 3, fill=COLORS["blue"], outline="")
