@@ -1,4 +1,3 @@
-from logging import root
 import tkinter as tk
 from tkinter import font as tkfont
 import requests
@@ -368,7 +367,7 @@ class BookDownloaderApp:
         self.description_expanded = False
         self.interface_language = "uk"
         self.theme_mode = "dark"
-        self.font_size = 10
+        self.font_size = "medium"
         self.placeholder_active = True
         self.api_results: list[dict] | None = None
         self.extra_books: dict[str, dict] = {}
@@ -432,6 +431,24 @@ class BookDownloaderApp:
             "cover": tkfont.Font(family="Georgia", size=17, weight="bold"),
             "cover_small": tkfont.Font(family="Georgia", size=8, weight="bold"),
         }
+
+    def _apply_font_size(self) -> None:
+        base_sizes = {
+            "brand": 10,
+            "nav": 10,
+            "body": 10,
+            "body_small": 9,
+            "caption": 8,
+            "section": 11,
+            "title": 13,
+            "detail_title": 22,
+            "button": 10,
+            "cover": 17,
+            "cover_small": 8,
+        }
+        offset = {"small": -1, "medium": 0, "large": 2}[self.font_size]
+        for name, base_size in base_sizes.items():
+            self.fonts[name].configure(size=base_size + offset)
 
     def _round_rect(
         self,
@@ -924,6 +941,9 @@ class BookDownloaderApp:
         elif action == "set_theme" and payload in ("dark", "light"):
             self.theme_mode = payload
             self._apply_theme()
+        elif action == "set_font_size" and payload in ("small", "medium", "large"):
+            self.font_size = payload
+            self._apply_font_size()
         self.draw()
 
     def _start_download(self, book_id: str) -> None:
