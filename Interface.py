@@ -2,7 +2,11 @@ import tkinter as tk
 from tkinter import font as tkfont
 import requests
 from tkinter import filedialog
+from typing import Literal
 from urllib.parse import quote
+
+TextAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
+TextJustify = Literal["left", "center", "right"]
 
 
 COLORS = {
@@ -476,20 +480,20 @@ class BookDownloaderApp:
         text: str,
         fill: str = COLORS["text"],
         font: str = "body",
-        anchor: str = "nw",
+        anchor: TextAnchor = "nw",
         width: float | None = None,
-        justify: str = "left",
+        justify: TextJustify = "left",
     ) -> int:
-        return self.canvas.create_text(
-            x,
-            y,
-            text=text,
-            fill=fill,
-            font=self.fonts[font],
-            anchor=anchor,
-            width=width,
-            justify=justify,
-        )
+        kwargs = {
+            "text": text,
+            "fill": fill,
+            "font": self.fonts[font],
+            "anchor": anchor,
+            "justify": justify,
+        }
+        if width is not None:
+            kwargs["width"] = width
+        return self.canvas.create_text(x, y, **kwargs)
 
     def _button(
         self,
@@ -2113,7 +2117,7 @@ class BookDownloaderApp:
         text: str,
         fill: str,
         font: str,
-        anchor: str,
+        anchor: TextAnchor,
         max_width: float,
     ) -> int:
         return self._text(x, y, self._trim(text, max_width, font), fill, font, anchor)
