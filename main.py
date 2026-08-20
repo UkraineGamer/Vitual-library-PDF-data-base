@@ -1,6 +1,11 @@
-from dotenv import load_dotenv
-from Interface import BookDownloaderApp
-from setup import Setup
+from virtual_library.settings import load_settings
+from virtual_library.ui import BookDownloaderApp
 
-setup = Setup()
-setup.initialize_setup()
+
+def main() -> None:
+    load_settings()
+    BookDownloaderApp().run()
+
+
+if __name__ == "__main__":
+    main()

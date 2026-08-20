@@ -1,0 +1,1 @@
+"""Virtual library application package."""
