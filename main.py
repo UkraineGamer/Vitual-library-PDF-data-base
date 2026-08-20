@@ -1,7 +1,6 @@
 from dotenv import load_dotenv
 from Interface import BookDownloaderApp
+from setup import Setup
 
-load_dotenv()
-
-if __name__ == "__main__":
-    BookDownloaderApp()
+setup = Setup()
+setup.initialize_setup()
