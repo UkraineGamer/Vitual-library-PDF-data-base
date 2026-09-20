@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import font as tkfont
 
-from virtual_library.config import COLORS, DARK_COLORS, LIGHT_COLORS, TextAnchor, TextJustify, UI_STRINGS
-from virtual_library.data import BOOKS, CATEGORIES, DOWNLOADS, SIDEBAR_ITEMS
+from virtual_library.config import COLORS, DARK_COLORS, LIGHT_COLORS, TextAnchor, UI_STRINGS
+from virtual_library.data import BOOKS, CATEGORIES, DOWNLOADS
 from virtual_library.services import BookSearch
 from virtual_library.ui.components import UiComponentsMixin
 from virtual_library.ui.views import AppViewsMixin
@@ -112,8 +112,9 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         base_sizes = {
             "brand": 10,
             "nav": 10,
-            "body": 10,
-            "body_small": 9,
+            "body": 13,
+            "body_small": 10,
+            "body_detail": 11,
             "caption": 8,
             "section": 11,
             "title": 13,
@@ -229,7 +230,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
                     str(book["isbn"]),
                 ]
             ).casefold()
-            if query and query not in haystack:
+            if query and not all(word in haystack for word in query.split()):
                 continue
             visible.append(book)
         return visible
@@ -541,6 +542,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         width = max(self.canvas.winfo_width(), 1060)
         height = max(self.canvas.winfo_height(), 700)
         self.canvas.delete("all")
+        self._cover_refs = []
         self.buttons = []
         self.results_scroll_bounds = None
         self.results_scrollbar_bounds = None
@@ -594,7 +596,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         self._draw_search_bar(search_x, search_y, left_content_w)
         panel_top = category_y + self._category_container_height() + 10
         self._search_area_bottom = category_y + self._category_container_height()
-        results_h = max(342, height - panel_top - downloads_h - 24)
+        results_h = max(150, height - panel_top - downloads_h - 24)
         self._draw_results(search_x, panel_top, left_content_w, results_h)
         self._draw_downloads(search_x, panel_top + results_h + 10, left_content_w, downloads_h)
         self._draw_details(right_x, panel_top, right_w, height - panel_top - bottom_margin)
@@ -729,7 +731,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             if self.fonts[font].measure(lines[-1] + ellipsis) <= max_width:
                 lines[-1] = lines[-1].rstrip() + ellipsis
             else:
-                lines[-1] = self._trim(lines[-1], max_width, font)
+                lines[-1] = self._trim(lines[-1] + ellipsis, max_width, font)
         return lines
 
     def _text_block(

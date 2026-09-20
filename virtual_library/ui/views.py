@@ -1,5 +1,5 @@
 from virtual_library.config import COLORS
-from virtual_library.data import DOWNLOADS, SIDEBAR_ITEMS
+from virtual_library.data import BOOKS, DOWNLOADS, SIDEBAR_ITEMS
 
 
 class AppViewsMixin:
@@ -41,16 +41,16 @@ class AppViewsMixin:
         return 10 + 27 + 8 + 6 + 10
 
     def _draw_search_bar(self, x: float, y: float, left_w: float) -> None:
-        search_w = min(620, max(420, left_w + 100))
+        search_w = max(1, self.canvas.winfo_width() - x - 14)
         search_label = self._t("search")
         search_button_w = 36 + self.fonts["button"].measure(search_label) + 14
         search_h = 44
-        self._round_rect(x, y, x + search_w + 400, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
-        self.search_entry.place(x=x + 16, y=y + 11, width=search_w + 275, height=22)
+        self._round_rect(x, y, x + search_w, y + search_h, 7, fill=COLORS["input_bg"], outline=COLORS["input_line"])
+        self.search_entry.place(x=x + 16, y=y + 11, width=max(1, search_w - search_button_w - 32), height=22)
         self._button(
-            x + search_w + 300,
+            x + search_w - search_button_w,
             y + 1,
-            x + search_w + 400,
+            x + search_w,
             y + search_h - 1,
             self._t("search"),
             "search",
@@ -84,57 +84,31 @@ class AppViewsMixin:
             return
 
         geom = self._category_container_geom
-        side_w = 29
-        app = COLORS["app"]
-        panel = COLORS["panel"]
-        line = COLORS["line"]
-        chip_y = geom["chip_y"]
-        chip_y2 = chip_y + geom["chip_h"] + 1
-
-        self.canvas.create_rectangle(
-            geom["x"] - side_w,
-            chip_y,
-            geom["x"],
-            chip_y2,
-            fill=app,
-            outline="",
-        )
-        self.canvas.create_rectangle(
-            geom["x"] + geom["w"] - 150,
-            chip_y,
-            geom["x"] + geom["w"] + side_w - 50,
-            chip_y2,
-            fill=panel,
-            outline="",
-        )
-        self.canvas.create_rectangle(
-            geom["x"] + geom["w"] - 145 ,
-            chip_y - 10,
-            geom["x"] + geom["w"] - 144,
-            chip_y2 + 24,
-            fill=line,
-            outline="",
-        )
+        left = geom["viewport_x"]
+        right = left + geom["viewport_w"]
+        y1 = geom["chip_y"]
+        y2 = y1 + geom["chip_h"] + 1
+        self.canvas.create_rectangle(geom["x"], y1, left, y2, fill=COLORS["panel"], outline="")
+        self.canvas.create_rectangle(right, y1, geom["x"] + geom["w"], y2, fill=COLORS["panel"], outline="")
 
     def _draw_category_container(self, x: float, y: float, w: float) -> float:
         pad_x = 12
         pad_y = 10
         chip_h = 27
         scroll_h = 6
-        scroll_gap = 8
         container_h = self._category_container_height()
 
         self._round_rect(x, y, x + w, y + container_h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
 
         viewport_x = x + pad_x
-        viewport_w = w - pad_x * 2
+        viewport_w = max(1, w - pad_x * 2 - 150)
         chip_y = y + pad_y
 
         chips, total_w = self._category_chips_metrics()
-        max_scroll = max(0, int(total_w - viewport_w + 140))
+        max_scroll = max(0, int(total_w - viewport_w))
         self.category_scroll = max(0, min(self.category_scroll, max_scroll))
         has_scroll = max_scroll > 0
-        self.category_scroll_bounds = (x, y, x + w, y + container_h, max_scroll)
+        self.category_scroll_bounds = (viewport_x, y, viewport_x + viewport_w, y + container_h, max_scroll)
         self._category_container_geom = {
             "x": x,
             "y": y,
@@ -149,7 +123,7 @@ class AppViewsMixin:
         chip_x = viewport_x - self.category_scroll
         for category, chip_w in chips:
             chip_right = chip_x + chip_w
-            if chip_right > viewport_x and chip_x < viewport_x + viewport_w - 120:
+            if chip_right > viewport_x and chip_x < viewport_x + viewport_w:
                 active = self.active_category == category
                 fill = COLORS["blue"] if active else COLORS["panel_alt"]
                 text_fill = COLORS["text"] if active else COLORS["text_soft"]
@@ -167,15 +141,18 @@ class AppViewsMixin:
                     radius=7,
                     font="body_small",
                 )
+                # Canvas masks hide clipped chips; clip their hit areas as well.
+                self.buttons[-1]["x1"] = max(chip_x, viewport_x)
+                self.buttons[-1]["x2"] = min(chip_right, viewport_x + viewport_w)
             chip_x += chip_w + 8
 
         if has_scroll:
             track_x1 = viewport_x
-            track_x2 = viewport_x + viewport_w - 150
+            track_x2 = viewport_x + viewport_w
             track_y1 = y + container_h - pad_y - scroll_h
             track_y2 = track_y1 + scroll_h
             track_w = max(1, track_x2 - track_x1)
-            thumb_w = max(28, track_w * viewport_w / total_w - 100)
+            thumb_w = min(track_w, max(28, track_w * viewport_w / total_w))
             thumb_x = track_x1 + (track_w - thumb_w) * self.category_scroll / max(1, max_scroll)
             self._round_rect(track_x1, track_y1, track_x2, track_y2, 3, fill=COLORS["line_soft"], outline="")
             self._round_rect(thumb_x, track_y1, thumb_x + thumb_w, track_y2, 3, fill=COLORS["blue"], outline="")
@@ -801,9 +778,10 @@ class AppViewsMixin:
         ]
         detail_y = cover_y + 10
         detail_x = info_x + 150
+        detail_max_w = max(1, x + w - 20 - detail_x)
         detail_gap = 20
         for i, line in enumerate(detail_lines):
-            self._text_fit(detail_x, detail_y + i * detail_gap, line, COLORS["text_soft"], "body_detail", "w", info_max_w)
+            self._text_fit(detail_x, detail_y + i * detail_gap, line, COLORS["text_soft"], "body_detail", "w", detail_max_w)
 
         self._text(detail_x, detail_y + 125, "★★★★★", COLORS["yellow"], "body")
         self._text_fit(
@@ -813,7 +791,7 @@ class AppViewsMixin:
             COLORS["text_soft"],
             "body_small",
             "w",
-            info_max_w,
+            detail_max_w,
         )
 
         action_y = cover_y + 228

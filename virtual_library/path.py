@@ -1,22 +1,21 @@
-from tkinter import Tk
-from tkinter import filedialog
-from tkinter.filedialog import askopenfilename
+"""Compatibility wrapper for the shared file picker."""
+from virtual_library.services import BookSearch
 
 
 class Url_path:
     def __init__(self):
-        self.root = Tk()
-        self.fi = []
+        self.fi = ""
 
-    def save_path(self):
-        self.fi = []
-        file = askopenfilename()
+    def save_path(self, parent=None):
+        self.fi = BookSearch().get_file_path(parent)
+        return self.fi
 
-        if file:
-            self.fi.append(str(file))
-            self.fi = f'{self.fi[0]}'
-            print(self.fi)
 
-URL = Url_path()
-URL.save_path()
-print(URL.fi)
+if __name__ == "__main__":
+    import tkinter as tk
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        print(Url_path().save_path(root))
+    finally:
+        root.destroy()

@@ -186,10 +186,3 @@ CATEGORIES = [
     "Технології",
     "Більше⌄",
 ]
-
-
-from virtual_library.config import COLORS, DARK_COLORS, LIGHT_COLORS, TextAnchor, TextJustify, UI_STRINGS
-from virtual_library.services import BookSearch
-
-
-
