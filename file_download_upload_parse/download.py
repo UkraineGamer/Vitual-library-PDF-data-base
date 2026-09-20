@@ -45,6 +45,8 @@ class Books_download:
         return re.sub(r":<([^>]*)>@", r":\1@", uri)
 
     def download_file_gfs(self, file_id: str | ObjectId, output_path: str | Path):
+        if not isinstance(file_id, (str, ObjectId)):
+            raise ValueError("file_id must be a MongoDB ObjectId or its hexadecimal string.")
         if isinstance(file_id, str):
             if not ObjectId.is_valid(file_id):
                 raise ValueError(
