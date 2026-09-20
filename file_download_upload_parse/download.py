@@ -4,7 +4,8 @@ from gridfs import GridFS
 from gridfs.errors import NoFile
 from bson import ObjectId
 from dotenv import load_dotenv
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+from shutil import copyfileobj
 import os
 import re
 
@@ -14,19 +15,20 @@ class Books_download:
         self.mongo_uri = self._normalise_mongo_uri(
             self._required_env("MONGO_URI")
         )
-        self.client = MongoClient(self.mongo_uri, server_api=ServerApi('1'))
+        self.mongo_db = self._required_env("MONGO_DB_NAME")
+        collection_name = self._required_env("MONGO_COLLECTION_NAME")
+        self.client = MongoClient(self.mongo_uri, server_api=ServerApi('1'), serverSelectionTimeoutMS=8000)
 
         try:
             self.client.admin.command('ping')
             print("Pinged your deployment. You successfully connected to MongoDB!")
         except Exception as exc:
+            self.client.close()
             raise ConnectionError(
                 "Could not authenticate with MongoDB Atlas. Check MONGO_URI, "
                 "the Atlas database user, and Network Access settings."
             ) from exc
 
-        self.mongo_db = self._required_env("MONGO_DB_NAME")
-        collection_name = self._required_env("MONGO_COLLECTION_NAME")
         self.fs = GridFS(self.client[self.mongo_db])
         self.mongo_collection = self.client[self.mongo_db][collection_name]
 
@@ -59,15 +61,19 @@ class Books_download:
             raise FileNotFoundError(
                 f"No GridFS file exists with ID: {file_id}"
             ) from exc
-        output_file_path = output_folder / file_data.filename
-
-        with output_file_path.open("wb") as f:
-            f.write(file_data.read())
-
-        print(f"File '{file_data.filename}' downloaded from GridFS to: {output_file_path}")
-
-if __name__ == "__main__":
-    open_books = Books_download()
-    # Replace 'your_file_id_here' with the actual file ID you want to download
-    file_id_to_download = '6a9422cbedceb9192d302b4a'
-    open_books.download_file_gfs(file_id_to_download, Path(__file__).resolve().parents[1] / "downloads")
+        with file_data:
+            filename = file_data.filename
+            if (not isinstance(filename, str) or not filename or filename in (".", "..")
+                    or Path(filename).name != filename or PureWindowsPath(filename).name != filename
+                    or ":" in filename):
+                raise ValueError("GridFS filename must be a plain filename.")
+            output_file_path = output_folder / filename
+            # Exclusive creation preserves existing files, including symlinks.
+            with output_file_path.open("xb") as output:
+                try:
+                    copyfileobj(file_data, output)
+                except Exception:
+                    output.close()
+                    output_file_path.unlink()
+                    raise
+        return output_file_path
