@@ -44,6 +44,10 @@ class StorageTests(unittest.TestCase):
         downloader.fs = Mock()
         file_id = ObjectId()
         with TemporaryDirectory() as folder:
+            for invalid in (None, {}, [], 'invalid'):
+                with self.assertRaises(ValueError):
+                    downloader.download_file_gfs(invalid, folder)
+            downloader.fs.get.assert_not_called()
             for filename in ('../outside.pdf', r'..\outside.pdf', '/outside.pdf', r'C:\outside.pdf', 'file:stream', None):
                 data = io.BytesIO(b'PDF')
                 data.filename = filename
