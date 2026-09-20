@@ -1,59 +1,36 @@
-from pymongo import MongoClient
-from gridfs import GridFS
-from dotenv import load_dotenv
+"""Compatibility entry point for uploading a PDF using the current storage service."""
 from pathlib import Path
-import os
+
+from file_download_upload_parse.upload import Books_upload
 
 
 class Books_open:
     def __init__(self):
-        self.mongo_uri = ""
-        self.cluster = ""
-        self.client = None
-        self.db = None
-        self.fs = None
-        self.files_collection = None
-
-    def get_uri(self):
-        load_dotenv(Path("secure.env"))
-        self.mongo_uri = os.getenv("MONGO_URI")
-        self.cluster = os.getenv("appName")
+        self.uploader = None
 
     def connect_mongodb(self, db_name: str | None = None):
-        self.get_uri()
-        if not self.mongo_uri:
-            raise ValueError("MONGO_URI is not set in secure.env")
+        if self.uploader is None:
+            self.uploader = Books_upload()
+        if db_name and db_name != self.uploader.mongo_db:
+            raise ValueError("Set MONGO_DB_NAME in .env to select the database.")
+        return self.uploader.client[self.uploader.mongo_db]
 
-        self.client = MongoClient(self.mongo_uri)
-        self.client.admin.command("ping")
+    def file_gfs_upload(self, file_path=None):
+        if file_path is None:
+            file_path = input("PDF file path: ").strip().strip('"')
+        if not file_path:
+            raise ValueError("A PDF file path is required.")
+        self.connect_mongodb()
+        return self.uploader.upload_file_gfs(Path(file_path))
 
-        db_name = db_name or os.getenv("MONGO_DB", "library")
-        self.db = self.client[db_name]
-        self.fs = GridFS(self.db)
-        self.files_collection = self.db["books"]
-        return self.db
+    def close(self):
+        if self.uploader is not None:
+            self.uploader.client.close()
 
-    def file_gfs_upload(self):
-        if self.fs is None or self.files_collection is None:
-            self.connect_mongodb()
-        assert self.fs is not None and self.files_collection is not None
 
-        file_path = Path(
-            input("Будь ласка, вставте сюди назву вашого файлу: ").strip().strip('"')
-        )
-        if not file_path.exists():
-            raise FileNotFoundError(f"Файл не знайдено: {file_path.resolve()}")
-
-        with file_path.open("rb") as f:
-            file_id = self.fs.put(f, filename=file_path.name)
-
-        file_saved = {
-            "file_id": file_id,
-            "filename": file_path.name,
-        }
-        result = self.files_collection.insert_one(file_saved)
-        return result.inserted_id
-
-db = Books_open()
-db.connect_mongodb()
-db.file_gfs_upload()
+if __name__ == "__main__":
+    app = Books_open()
+    try:
+        print(app.file_gfs_upload())
+    finally:
+        app.close()
