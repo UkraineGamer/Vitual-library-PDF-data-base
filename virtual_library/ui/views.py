@@ -128,9 +128,9 @@ class AppViewsMixin:
                 fill = COLORS["blue"] if active else COLORS["panel_alt"]
                 text_fill = COLORS["text"] if active else COLORS["text_soft"]
                 self._button(
-                    chip_x,
+                    max(chip_x, viewport_x),
                     chip_y,
-                    chip_x + chip_w,
+                    min(chip_right, viewport_x + viewport_w),
                     chip_y + chip_h,
                     category,
                     "category",
@@ -141,9 +141,6 @@ class AppViewsMixin:
                     radius=7,
                     font="body_small",
                 )
-                # Canvas masks hide clipped chips; clip their hit areas as well.
-                self.buttons[-1]["x1"] = max(chip_x, viewport_x)
-                self.buttons[-1]["x2"] = min(chip_right, viewport_x + viewport_w)
             chip_x += chip_w + 8
 
         if has_scroll:
