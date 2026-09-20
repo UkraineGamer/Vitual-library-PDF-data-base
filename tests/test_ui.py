@@ -20,6 +20,12 @@ class UiTests(unittest.TestCase):
             with patch.object(self.app.canvas, 'winfo_width', return_value=width), patch.object(self.app.canvas, 'winfo_height', return_value=height):
                 for _, label in SIDEBAR_ITEMS:
                     self.app._handle_action('nav', label)
+                    if label == 'Головна':
+                        for item in self.app.canvas.find_all():
+                            if self.app.canvas.type(item) == 'text':
+                                x, y = self.app.canvas.coords(item)
+                                if x >= width - 412:
+                                    self.assertGreaterEqual(y, 22)
                 self.app._handle_action('nav', 'Пошук книг')
                 search = next(button for button in self.app.buttons if button['action'] == 'search')
                 self.assertLessEqual(search['x2'], width - 14)
@@ -39,6 +45,18 @@ class UiTests(unittest.TestCase):
         self.app._cover_refs = [object()]
         self.app.draw()
         self.assertEqual(self.app._cover_refs, [])
+
+    def test_search_words_can_match_separate_fields(self):
+        self.app.placeholder_active = False
+        self.app.search_entry.delete(0, tk.END)
+        self.app.search_entry.insert(0, '1984 Орвелл')
+        self.assertEqual([book['id'] for book in self.app._visible_books()], ['1984'])
+
+    def test_wrapped_description_marks_omitted_lines(self):
+        width = self.app.fonts['body'].measure('word word')
+        lines = self.app._wrap_text('word word word word', width, 'body', max_lines=1)
+        self.assertTrue(lines[0].endswith('...'))
+        self.assertLessEqual(self.app.fonts['body'].measure(lines[0]), width)
 
     def test_file_picker_import_has_no_gui_side_effect(self):
         with patch('tkinter.Tk') as root, patch('tkinter.filedialog.askopenfilename') as dialog:

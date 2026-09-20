@@ -757,11 +757,11 @@ class AppViewsMixin:
             )
 
     def _draw_details(self, x: float, y: float, w: float, h: float) -> None:
-        self._round_rect(x, y - 70, x + w, y + h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
+        self._round_rect(x, y, x + w, y + h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
         book = self._book_by_id(self.selected_book_id)
 
         cover_x = x + 20
-        cover_y = y - 17
+        cover_y = y + 53
         self._draw_cover(cover_x, cover_y, 140, 200, book, small=False)
 
         info_x = cover_x
@@ -779,14 +779,15 @@ class AppViewsMixin:
         detail_y = cover_y + 10
         detail_x = info_x + 150
         detail_max_w = max(1, x + w - 20 - detail_x)
-        detail_gap = 20
+        detail_gap = max(20, self._line_height("body_detail"))
         for i, line in enumerate(detail_lines):
             self._text_fit(detail_x, detail_y + i * detail_gap, line, COLORS["text_soft"], "body_detail", "w", detail_max_w)
 
-        self._text(detail_x, detail_y + 125, "★★★★★", COLORS["yellow"], "body")
+        rating_y = detail_y + len(detail_lines) * detail_gap + 8
+        self._text(detail_x, rating_y, "★★★★★", COLORS["yellow"], "body")
         self._text_fit(
             detail_x,
-            detail_y + 154,
+            rating_y + 24,
             f"{book['rating']} ({book['reviews']} оцінок)",
             COLORS["text_soft"],
             "body_small",

@@ -599,7 +599,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         results_h = max(150, height - panel_top - downloads_h - 24)
         self._draw_results(search_x, panel_top, left_content_w, results_h)
         self._draw_downloads(search_x, panel_top + results_h + 10, left_content_w, downloads_h)
-        self._draw_details(right_x, panel_top, right_w, height - panel_top - bottom_margin)
+        self._draw_details(right_x, category_y, right_w, height - category_y - bottom_margin)
         self._draw_category_side_masks()
         self._draw_filter_button(right_x, right_w, category_y)
     def _draw_cover(self, x: float, y: float, w: float, h: float, book: dict, *, small: bool) -> None:
