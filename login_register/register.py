@@ -1,45 +1,72 @@
 import os
-from dotenv import load_dotenv
-import os
-from pymongo import MongoClient
-from pymongo.server_api import ServerApi
+
 import bcrypt
+from dotenv import load_dotenv
+from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
+from pymongo.server_api import ServerApi
+
 
 class UserRegister:
     def __init__(self):
         load_dotenv()
-        self.mongo_uri = self._required_env("MONGO_URI")
-        self.client = MongoClient(self.mongo_uri, server_api=ServerApi('1'))
-
+        uri = self._required_env('MONGO_URI')
+        database = self._required_env('MONGO_USERS_DB_NAME')
+        collection = os.getenv('MONGO_ACCOUNTS_COLLECTION_NAME') or self._required_env('MONGO_ACCAUNTS_COLLECTION_NAME')
+        self.client = MongoClient(uri, server_api=ServerApi('1'), serverSelectionTimeoutMS=8000)
         try:
             self.client.admin.command('ping')
-            print("Pinged your deployment. You successfully connected to MongoDB!")
-        except Exception as exc:
-            raise ConnectionError(
-                "Could not authenticate with MongoDB Atlas. Check MONGO_URI, "
-                "the Atlas database user, and Network Access settings."
-            ) from exc
-
-        self.mongo_db = self._required_env("MONGO_USERS_DB_NAME")
-        collection_name = self._required_env("MONGO_ACCAUNTS_COLLECTION_NAME")
-        self.mongo_collection = self.client[self.mongo_db][collection_name]
+            self.mongo_collection = self.client[database][collection]
+            self.mongo_collection.create_index('username', unique=True)
+        except Exception:
+            self.client.close()
+            raise
 
     @staticmethod
     def _required_env(name: str) -> str:
         value = os.getenv(name)
-        if not value:
-            raise RuntimeError(f"Missing required environment variable: {name}")
-        return value
+        if not value or not value.strip():
+            raise RuntimeError(f'Missing required environment variable: {name}')
+        return value.strip()
 
-    def register_user(self, username: str, password: str):
-        existing_user = self.mongo_collection.find_one({"username": username})
-        if existing_user:
-            return f"User '{username}' already exists."
+    @staticmethod
+    def _credentials(username: str, password: str) -> tuple[str, bytes]:
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise ValueError('Username and password must be text.')
+        username = username.strip()
+        encoded = password.encode('utf-8')
+        if not username or not encoded or len(encoded) > 72:
+            raise ValueError('Enter a username and a password of 1 to 72 UTF-8 bytes.')
+        return username, encoded
 
-        user_data = {
-            "username": username,
-            "password": bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        }
+    def register_user(self, username: str, password: str) -> bool:
+        username, encoded = self._credentials(username, password)
+        if self.mongo_collection.find_one({'username': username}) is not None:
+            return False
+        user = {'username': username, 'password': bcrypt.hashpw(encoded, bcrypt.gensalt()).decode('utf-8')}
+        try:
+            self.mongo_collection.insert_one(user)
+        except DuplicateKeyError:
+            return False
+        return True
 
-        self.mongo_collection.insert_one(user_data)
-        return f"User '{username}' registered successfully."
+    def login_user(self, username: str, password: str) -> bool:
+        try:
+            username, encoded = self._credentials(username, password)
+        except ValueError:
+            return False
+        user = self.mongo_collection.find_one({'username': username})
+        if user is None:
+            return False
+        hashed = user.get('password')
+        if isinstance(hashed, str):
+            hashed = hashed.encode('utf-8')
+        if not isinstance(hashed, bytes):
+            return False
+        try:
+            return bcrypt.checkpw(encoded, hashed)
+        except ValueError:
+            return False
+
+    def close(self):
+        self.client.close()
