@@ -9,6 +9,7 @@ class CategoryLayoutTests(unittest.TestCase):
         view = AppViewsMixin()
         view.canvas = Mock()
         view._round_rect = Mock()
+        view._line_height = lambda _font: 18
         view._category_chips_metrics = lambda: ([(str(i), 70) for i in range(8)], 624)
         view.active_category = '0'
         view.buttons = []
