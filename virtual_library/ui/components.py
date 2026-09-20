@@ -14,6 +14,7 @@ class UiComponentsMixin:
         outline: str = "",
         width: int = 1,
     ) -> int:
+        radius = min(radius, max(0, (x2 - x1) / 2), max(0, (y2 - y1) / 2))
         points = [
             x1 + radius,
             y1,
@@ -46,7 +47,7 @@ class UiComponentsMixin:
             splinesteps=12,
             fill=fill,
             outline=outline,
-            width=width,
+            width=width * self.ui_scale,
         )
 
     def _text(
@@ -91,15 +92,15 @@ class UiComponentsMixin:
         key = (action, payload)
         hovered = self.hover_action == key
         bg = active_fill if hovered and active_fill else fill
-        self._round_rect(x1, y1, x2, y2, radius, fill=bg, outline=COLORS["line_soft"])
+        item = self._round_rect(x1, y1, x2, y2, radius, fill=bg, outline=COLORS["line_soft"])
         center_y = (y1 + y2) / 2
-        if icon:
-            label_max = max(20, x2 - x1 - 42)
+        if icon and x2 - x1 >= 52:
+            label_max = max(0, x2 - x1 - 42)
             label = self._trim(label, label_max, font)
             self._text(x1 + 14, center_y, icon, text_fill, "body", "w")
             self._text(x1 + 36, center_y, label, text_fill, font, "w")
         else:
-            label_max = max(20, x2 - x1 - 12)
+            label_max = max(0, x2 - x1 - 12)
             label = self._trim(label, label_max, font)
             self._text((x1 + x2) / 2, center_y, label, text_fill, font, "center")
         self.buttons.append(
@@ -110,6 +111,9 @@ class UiComponentsMixin:
                 "y2": y2,
                 "action": action,
                 "payload": payload,
+                "item": item,
+                "fill": fill,
+                "hover_fill": active_fill or fill,
             }
         )
 
