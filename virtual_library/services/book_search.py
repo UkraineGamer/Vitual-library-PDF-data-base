@@ -11,23 +11,41 @@ class BookSearch:
         self.file_root = ""
 
     def search_books(self, title: str) -> list[dict]:
+        if not title.strip():
+            return []
         try:
             response = requests.get(
                 f"https://openlibrary.org/search.json?title={quote(title)}", timeout=10
             )
             response.raise_for_status()
-        except requests.RequestException:
+            data = response.json()
+        except (requests.RequestException, ValueError):
             return []
 
+        docs = data.get("docs") if isinstance(data, dict) else None
+        if not isinstance(docs, list):
+            return []
         results: list[dict] = []
-        for index, book in enumerate(response.json().get("docs", [])[:10]):
+        seen = set()
+        for index, book in enumerate(docs):
+            if not isinstance(book, dict):
+                continue
+            book_id = str(book.get("key") or f"ol-{index}").replace("/works/", "ol-")
+            if book_id in seen:
+                continue
+            seen.add(book_id)
             year = book.get("first_publish_year", "Невідомо")
-            isbn_list = book.get("isbn", [])
+            isbn_list = book.get("isbn") or []
+            if not isinstance(isbn_list, list):
+                isbn_list = []
+            authors = book.get("author_name") or ["Невідомо"]
+            if not isinstance(authors, list):
+                authors = [authors]
             results.append(
                 {
-                    "id": book.get("key", f"ol-{index}").replace("/works/", "ol-"),
-                    "title": book.get("title", "Невідомо"),
-                    "author": ", ".join(book.get("author_name", ["Невідомо"])),
+                    "id": book_id,
+                    "title": str(book.get("title") or "Невідомо"),
+                    "author": ", ".join(str(author) for author in authors if author is not None),
                     "meta": f"Рік: {year}",
                     "categories": ["Усі"],
                     "pages": book.get("number_of_pages_median", "—"),
@@ -44,6 +62,8 @@ class BookSearch:
                     "cover_accent": "#c89745",
                 }
             )
+            if len(results) == 10:
+                break
         return results
 
     def get_file_path(self, parent=None) -> str:
