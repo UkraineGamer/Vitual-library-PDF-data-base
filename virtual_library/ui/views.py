@@ -84,27 +84,12 @@ class AppViewsMixin:
             return
 
         geom = self._category_container_geom
-        side_w = 29
-        app = COLORS["app"]
-        chip_y = geom["chip_y"]
-        chip_y2 = chip_y + geom["chip_h"] + 1
-
-        self.canvas.create_rectangle(
-            geom["x"] - side_w,
-            chip_y,
-            geom["x"],
-            chip_y2,
-            fill=app,
-            outline="",
-        )
-        self.canvas.create_rectangle(
-            geom["x"] + geom["w"] + 1,
-            chip_y,
-            geom["x"] + geom["w"] + side_w + 50,
-            chip_y2,
-            fill=app,
-            outline="",
-        )
+        left = geom["viewport_x"]
+        right = left + geom["viewport_w"]
+        y1 = geom["chip_y"]
+        y2 = y1 + geom["chip_h"] + 1
+        self.canvas.create_rectangle(geom["x"], y1, left, y2, fill=COLORS["panel"], outline="")
+        self.canvas.create_rectangle(right, y1, geom["x"] + geom["w"], y2, fill=COLORS["panel"], outline="")
 
     def _draw_category_container(self, x: float, y: float, w: float) -> float:
         pad_x = 12
@@ -117,14 +102,14 @@ class AppViewsMixin:
         self._round_rect(x, y, x + w, y + container_h, 8, fill=COLORS["panel"], outline=COLORS["line_soft"])
 
         viewport_x = x + pad_x
-        viewport_w = w - pad_x * 2
+        viewport_w = max(1, w - pad_x * 2 - 150)
         chip_y = y + pad_y
 
         chips, total_w = self._category_chips_metrics()
         max_scroll = max(0, int(total_w - viewport_w))
         self.category_scroll = max(0, min(self.category_scroll, max_scroll))
         has_scroll = max_scroll > 0
-        self.category_scroll_bounds = (x, y, x + w, y + container_h, max_scroll)
+        self.category_scroll_bounds = (viewport_x, y, viewport_x + viewport_w, y + container_h, max_scroll)
         self._category_container_geom = {
             "x": x,
             "y": y,
@@ -144,9 +129,9 @@ class AppViewsMixin:
                 fill = COLORS["blue"] if active else COLORS["panel_alt"]
                 text_fill = COLORS["text"] if active else COLORS["text_soft"]
                 self._button(
-                    chip_x,
+                    max(chip_x, viewport_x),
                     chip_y,
-                    chip_x + chip_w,
+                    min(chip_right, viewport_x + viewport_w),
                     chip_y + chip_h,
                     category,
                     "category",
@@ -165,7 +150,7 @@ class AppViewsMixin:
             track_y1 = y + container_h - pad_y - scroll_h
             track_y2 = track_y1 + scroll_h
             track_w = max(1, track_x2 - track_x1)
-            thumb_w = max(28, track_w * viewport_w / total_w)
+            thumb_w = min(track_w, max(28, track_w * viewport_w / total_w))
             thumb_x = track_x1 + (track_w - thumb_w) * self.category_scroll / max(1, max_scroll)
             self._round_rect(track_x1, track_y1, track_x2, track_y2, 3, fill=COLORS["line_soft"], outline="")
             self._round_rect(thumb_x, track_y1, thumb_x + thumb_w, track_y2, 3, fill=COLORS["blue"], outline="")
