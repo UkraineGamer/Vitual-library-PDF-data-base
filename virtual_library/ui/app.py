@@ -1,7 +1,9 @@
 import tkinter as tk
-from tkinter import font as tkfont
+from tkinter import font as tkfont, ttk
+from queue import Empty, Queue
+from threading import Thread
 
-from virtual_library.config import COLORS, DARK_COLORS, LIGHT_COLORS, TextAnchor, TextJustify, UI_STRINGS
+from virtual_library.config import COLORS, DARK_COLORS, LIGHT_COLORS, TextAnchor, UI_STRINGS
 from virtual_library.data import BOOKS, CATEGORIES, DOWNLOADS, SIDEBAR_ITEMS
 from virtual_library.services import BookSearch
 from virtual_library.ui.components import UiComponentsMixin
@@ -13,8 +15,18 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         self.book_search = BookSearch()
         self.root = tk.Tk()
         self.root.title("BookDownloader")
-        self.root.geometry("1280x850")
-        self.root.minsize(1060, 700)
+        screen_w, screen_h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.root.geometry(f"{min(1280, max(320, screen_w - 80))}x{min(850, max(320, screen_h - 100))}")
+        self.root.minsize(min(360, screen_w), min(320, screen_h))
+        self.ui_scale = float(self.root.tk.call("tk", "scaling")) * 72 / 96
+        self._draw_job = None
+        self._cover_cache = {}
+        self._search_queue = Queue()
+        self._search_generation = 0
+        self._search_pending = False
+        self._search_running = False
+        self._search_job = None
+        self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.configure(bg=COLORS["app"])
 
         self.canvas = tk.Canvas(
@@ -23,7 +35,14 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             highlightthickness=0,
             bd=0,
         )
+        self.horizontal_scrollbar = ttk.Scrollbar(self.root, orient=tk.HORIZONTAL, command=self.canvas.xview)
+        self.page_scrollbar = ttk.Scrollbar(self.root, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.page_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.canvas.configure(yscrollcommand=self.page_scrollbar.set, xscrollcommand=self.horizontal_scrollbar.set, yscrollincrement=24)
         self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.nav_select = ttk.Combobox(self.canvas, state="readonly")
+        self.nav_select.bind("<<ComboboxSelected>>", lambda _event: self._handle_action("nav", SIDEBAR_ITEMS[self.nav_select.current()][1]))
+        self._nav_window = self.canvas.create_window(0, 0, window=self.nav_select, anchor="nw", state="hidden")
 
         self.fonts = self._build_fonts()
         self.buttons: list[dict] = []
@@ -57,12 +76,9 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         self.download_col_date_w = 132
         self.download_col_size_w = 80
         self.download_col_resize_handles: list[dict] = []
-        self.download_data_scroll = 0
-        self.download_data_scroll_bounds: tuple[float, float, float, float, int] | None = None
-        self.download_data_scrollbar_bounds: tuple[float, float, float, float, int, float, float, float] | None = None
 
         self.search_entry = tk.Entry(
-            self.root,
+            self.canvas,
             bd=0,
             relief=tk.FLAT,
             bg=COLORS["input_bg"],
@@ -75,8 +91,9 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         self.search_entry.bind("<FocusOut>", self._on_entry_focus_out)
         self.search_entry.bind("<KeyRelease>", self._on_search_change)
         self.search_entry.bind("<Return>", lambda _event: self._run_search())
+        self._search_window = self.canvas.create_window(0, 0, window=self.search_entry, anchor="nw", state="hidden")
 
-        self.canvas.bind("<Configure>", lambda _event: self.draw())
+        self.canvas.bind("<Configure>", lambda _event: self._request_draw())
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
@@ -86,6 +103,11 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", self._on_leave)
 
+        self.canvas.configure(takefocus=True)
+        self.canvas.bind("<Prior>", lambda _event: self.canvas.yview_scroll(-1, "pages"))
+        self.canvas.bind("<Next>", lambda _event: self.canvas.yview_scroll(1, "pages"))
+        self.canvas.bind("<Home>", lambda _event: self.canvas.yview_moveto(0))
+        self.canvas.bind("<End>", lambda _event: self.canvas.yview_moveto(1))
         self._apply_theme()
         self.draw()
 
@@ -98,6 +120,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             "nav": tkfont.Font(family="Segoe UI", size=10),
             "body": tkfont.Font(family="Segoe UI", size=13),
             "body_small": tkfont.Font(family="Segoe UI", size=10),
+            "body_detail": tkfont.Font(family="Segoe UI", size=11),
             "caption": tkfont.Font(family="Segoe UI", size=8),
             "section": tkfont.Font(family="Segoe UI Semibold", size=11),
             "title": tkfont.Font(family="Segoe UI Semibold", size=13),
@@ -111,8 +134,9 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         base_sizes = {
             "brand": 10,
             "nav": 10,
-            "body": 10,
-            "body_small": 9,
+            "body": 13,
+            "body_small": 10,
+            "body_detail": 11,
             "caption": 8,
             "section": 11,
             "title": 13,
@@ -156,7 +180,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
     def _category_chips_metrics(self) -> tuple[list[tuple[str, float]], float]:
         chips: list[tuple[str, float]] = []
         for category in CATEGORIES:
-            chip_w = max(32, self.fonts["body_small"].measure(category) + 24)
+            chip_w = max(32, self._measure(category, "body_small") + 24)
             chips.append((category, chip_w))
         total_w = sum(chip_w for _, chip_w in chips) + max(0, (len(chips) - 1) * 8)
         return chips, total_w
@@ -228,26 +252,61 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
                     str(book["isbn"]),
                 ]
             ).casefold()
-            if query and query not in haystack:
+            if query and not all(word in haystack for word in query.split()):
                 continue
             visible.append(book)
         return visible
 
     def _run_search(self) -> None:
         query = self._query()
+        self._search_generation += 1
         self._reset_results_scroll()
+        self._search_pending = bool(query)
         if not query:
             self.api_results = None
             self.draw()
             return
 
-        results = self.book_search.search_books(query)
-        self.api_results = results
-        for book in results:
-            self.extra_books[book["id"]] = book
-        if results:
-            self.selected_book_id = results[0]["id"]
+        if not self._search_running:
+            self._start_search(query)
+        if self._search_job is None:
+            self._search_job = self.root.after(50, self._poll_search)
         self.draw()
+
+    def _start_search(self, query):
+        generation = self._search_generation
+        self._search_running = True
+
+        def search():
+            try:
+                results = self.book_search.search_books(query)
+            except Exception:
+                results = []
+            self._search_queue.put((generation, query, results))
+
+        Thread(target=search, daemon=True).start()
+
+    def _poll_search(self) -> None:
+        self._search_job = None
+        try:
+            while True:
+                generation, query, results = self._search_queue.get_nowait()
+                self._search_running = False
+                if generation != self._search_generation:
+                    continue
+                self._search_pending = False
+                if query == self._query():
+                    self.api_results = results
+                    self.extra_books.update((book["id"], book) for book in results)
+                    if results:
+                        self.selected_book_id = results[0]["id"]
+                self.draw()
+        except Empty:
+            pass
+        if self._search_pending and not self._search_running:
+            self._start_search(self._query())
+        if self._search_running:
+            self._search_job = self.root.after(50, self._poll_search)
 
     def _on_entry_focus_in(self, _event: tk.Event) -> None:
         if self.placeholder_active:
@@ -266,9 +325,10 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
     def _on_search_change(self, _event: tk.Event) -> None:
         if not self.placeholder_active:
             self._reset_results_scroll()
-            self.draw()
+            self._request_draw()
 
     def _on_click(self, event: tk.Event) -> None:
+        event.x, event.y = self._event_position(event)
         if self.category_scrollbar_bounds:
             x1, y1, x2, y2, max_scroll, thumb_x, thumb_w, track_w = self.category_scrollbar_bounds
             if max_scroll > 0 and y1 <= event.y <= y2:
@@ -307,25 +367,6 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
                     self.draw()
                     return
 
-        if self.download_data_scrollbar_bounds:
-            x1, y1, x2, y2, max_scroll, thumb_x, thumb_w, track_w = self.download_data_scrollbar_bounds
-            if max_scroll > 0 and y1 <= event.y <= y2:
-                if thumb_x <= event.x <= thumb_x + thumb_w:
-                    self.scroll_drag = {
-                        "kind": "download_data",
-                        "start_mouse": event.x,
-                        "start_scroll": self.download_data_scroll,
-                        "thumb_size": thumb_w,
-                        "track_size": track_w,
-                        "max_scroll": max_scroll,
-                    }
-                    return
-                if x1 <= event.x <= x2:
-                    ratio = (event.x - x1) / max(1, x2 - x1)
-                    self.download_data_scroll = max(0, min(max_scroll, round(ratio * max_scroll)))
-                    self.draw()
-                    return
-
         for handle in self.download_col_resize_handles:
             if handle["x1"] <= event.x <= handle["x2"] and handle["y1"] <= event.y <= handle["y2"]:
                 self.scroll_drag = {
@@ -346,11 +387,12 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
                 return
 
     def _on_drag(self, event: tk.Event) -> None:
+        event.x, event.y = self._event_position(event)
         if not self.scroll_drag:
             return
 
         drag = self.scroll_drag
-        travel = max(1, drag["track_size"] - drag["thumb_size"])
+        travel = max(1, drag.get("track_size", 1) - drag.get("thumb_size", 0))
         if drag["kind"] == "category":
             delta = event.x - drag["start_mouse"]
             next_scroll = drag["start_scroll"] + delta * drag["max_scroll"] / travel
@@ -365,13 +407,6 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             if next_scroll != self.results_scroll:
                 self.results_scroll = next_scroll
                 self.draw()
-        elif drag["kind"] == "download_data":
-            delta = event.x - drag["start_mouse"]
-            next_scroll = drag["start_scroll"] + delta * drag["max_scroll"] / travel
-            next_scroll = max(0, min(drag["max_scroll"], round(next_scroll)))
-            if next_scroll != self.download_data_scroll:
-                self.download_data_scroll = next_scroll
-                self.draw()
         elif drag["kind"] == "col_resize":
             delta = round(event.x - drag["start_mouse"])
             new_a = drag["start_a"] + delta
@@ -385,47 +420,32 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         self.scroll_drag = None
 
     def _on_mousewheel(self, event: tk.Event) -> str | None:
+        event.x, event.y = self._event_position(event)
         if getattr(event, "num", None) == 4:
             direction = -1
         elif getattr(event, "num", None) == 5:
             direction = 1
         else:
-            direction = -1 if event.delta > 0 else 1
-
-        if self.category_scroll_bounds:
-            x1, y1, x2, y2, max_scroll = self.category_scroll_bounds
-            if x1 <= event.x <= x2 and y1 <= event.y <= y2 and max_scroll > 0:
-                step = 40
-                next_scroll = max(0, min(max_scroll, self.category_scroll + direction * step))
-                if next_scroll != self.category_scroll:
-                    self.category_scroll = next_scroll
-                    self.draw()
-                return "break"
-
-        if self.download_data_scroll_bounds:
-            x1, y1, x2, y2, max_scroll = self.download_data_scroll_bounds
-            if x1 <= event.x <= x2 and y1 <= event.y <= y2 and max_scroll > 0:
-                step = 40
-                next_scroll = max(0, min(max_scroll, self.download_data_scroll + direction * step))
-                if next_scroll != self.download_data_scroll:
-                    self.download_data_scroll = next_scroll
-                    self.draw()
-                return "break"
-
-        if not self.results_scroll_bounds:
-            return None
-
-        x1, y1, x2, y2, max_scroll = self.results_scroll_bounds
-        if not (x1 <= event.x <= x2 and y1 <= event.y <= y2) or max_scroll <= 0:
-            return None
-
-        next_scroll = max(0, min(max_scroll, self.results_scroll + direction))
-        if next_scroll != self.results_scroll:
-            self.results_scroll = next_scroll
-            self.draw()
+            delta = getattr(event, "delta", 0)
+            if not delta:
+                return None
+            direction = -1 if delta > 0 else 1
+        for bounds, name, step in ((self.category_scroll_bounds, "category_scroll", 40),
+                                   (self.results_scroll_bounds, "results_scroll", 1)):
+            if not bounds:
+                continue
+            x1, y1, x2, y2, maximum = bounds
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2:
+                value = max(0, min(maximum, getattr(self, name) + direction * step))
+                if value != getattr(self, name):
+                    setattr(self, name, value)
+                    self._request_draw()
+                    return "break"
+        self.canvas.yview_scroll(direction * 3, "units")
         return "break"
 
     def _on_motion(self, event: tk.Event) -> None:
+        event.x, event.y = self._event_position(event)
         over_resize = any(
             handle["x1"] <= event.x <= handle["x2"] and handle["y1"] <= event.y <= handle["y2"]
             for handle in self.download_col_resize_handles
@@ -440,21 +460,22 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             if button["x1"] <= event.x <= button["x2"] and button["y1"] <= event.y <= button["y2"]:
                 next_hover = (button["action"], button["payload"])
                 break
+        self.canvas.configure(cursor="hand2" if next_hover else "")
         if next_hover != self.hover_action:
-            self.hover_action = next_hover
-            self.canvas.configure(cursor="hand2" if next_hover else "")
-            self.draw()
+            self._set_hover(next_hover)
 
     def _on_leave(self, _event: tk.Event) -> None:
         if self.hover_action:
-            self.hover_action = None
+            self._set_hover(None)
             self.canvas.configure(cursor="")
-            self.draw()
 
     def _handle_action(self, action: str, payload: str | None) -> None:
         if action == "nav" and payload:
             self._reset_results_scroll()
             self.active_nav = payload
+            self.canvas.yview_moveto(0)
+            self._search_generation += 1
+            self._search_pending = False
             self.filter_open = False
             self.description_expanded = False
             if payload != "Пошук книг":
@@ -497,6 +518,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             DOWNLOADS[:] = [item for item in DOWNLOADS if item["book_id"] != payload]
         elif action == "show_history":
             self.active_nav = "Історія"
+            self.canvas.yview_moveto(0)
         elif action == "toggle_description":
             self.description_expanded = not self.description_expanded
         elif action == "set_language" and payload in ("uk", "en"):
@@ -536,75 +558,111 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             },
         )
 
+    def _close(self):
+        for job in (self._draw_job, self._search_job):
+            if job is not None:
+                self.root.after_cancel(job)
+        self.root.destroy()
+
+    def _request_draw(self):
+        if self._draw_job is None:
+            self._draw_job = self.root.after(16, self.draw)
+
+    def _event_position(self, event):
+        return self.canvas.canvasx(event.x) / self.ui_scale, self.canvas.canvasy(event.y) / self.ui_scale
+
+    def _set_hover(self, action):
+        self.hover_action = action
+        for button in self.buttons:
+            if "item" in button:
+                color = button["hover_fill"] if (button["action"], button["payload"]) == action else button["fill"]
+                self.canvas.itemconfigure(button["item"], fill=color)
+
     def draw(self) -> None:
-        width = max(self.canvas.winfo_width(), 1060)
-        height = max(self.canvas.winfo_height(), 700)
-        self.canvas.delete("all")
+        if self._draw_job is not None:
+            self.root.after_cancel(self._draw_job)
+            self._draw_job = None
+        self.ui_scale = max(0.5, float(self.root.tk.call("tk", "scaling")) * 72 / 96)
+        width = max(320, self.canvas.winfo_width() / self.ui_scale)
+        height = max(200, self.canvas.winfo_height() / self.ui_scale)
+        self.canvas.delete("drawing")
+        searching = self.active_nav not in ("Головна", "Налаштування", "Історія", "Завантаження")
+        for window, visible in ((self._search_window, searching), (self._nav_window, width < 1000)):
+            self.canvas.itemconfigure(window, state="normal" if visible else "hidden")
+            if not visible:
+                self.canvas.coords(window, 0, 0)
+                self.canvas.itemconfigure(window, width=1, height=1)
+        self._cover_refs = []
         self.buttons = []
-        self.results_scroll_bounds = None
-        self.results_scrollbar_bounds = None
-        self.category_scroll_bounds = None
-        self.category_scrollbar_bounds = None
+        self.results_scroll_bounds = self.results_scrollbar_bounds = None
+        self.category_scroll_bounds = self.category_scrollbar_bounds = None
         self._category_container_geom = None
         self.download_col_resize_handles = []
-        self.download_data_scroll_bounds = None
-        self.download_data_scrollbar_bounds = None
+        self._draw_content(width, height)
+        self.canvas.addtag_withtag("drawing", "all")
+        for item in (self._nav_window, self._search_window):
+            self.canvas.dtag(item, "drawing")
+            self.canvas.tag_raise(item)
+        self.canvas.scale("all", 0, 0, self.ui_scale, self.ui_scale)
+        bounds = self.canvas.bbox("all") or (0, 0, 0, 0)
+        self.canvas.configure(scrollregion=(0, 0, width * self.ui_scale, max(height * self.ui_scale, bounds[3] + 14 * self.ui_scale)))
+        if width * self.ui_scale > self.canvas.winfo_width() + 1:
+            self.horizontal_scrollbar.pack(side=tk.BOTTOM, fill=tk.X, before=self.canvas)
+        else:
+            self.horizontal_scrollbar.pack_forget()
 
-        self._round_rect(1, 1, width - 2, height - 2, 10, fill=COLORS["app"], outline="#0f2538")
-        self._draw_sidebar(height)
-
-        content_x = 215
-        content_y = 22
-        content_w = width - content_x - 14
-        right_w = 398 if content_w > 890 else 350
-        gap = 12
-        right_x = width - right_w - 14
-        left_w = right_x - content_x - gap
-        downloads_h = 226
-        bottom_margin = 14
-
+    def _draw_content(self, width, height):
+        sidebar = width >= 1000
+        x = 215 if sidebar else 12
+        y = 22 if sidebar else 64
+        w = width - x - 14
+        if sidebar:
+            self._draw_sidebar(max(height, 600))
+        else:
+            labels = [self._nav_label(label) for _, label in SIDEBAR_ITEMS]
+            self.nav_select.configure(values=labels, font=self.fonts["nav"])
+            self.nav_select.current([label for _, label in SIDEBAR_ITEMS].index(self.active_nav))
+            self.canvas.coords(self._nav_window, x, 12)
+            self.canvas.itemconfigure(self._nav_window, width=min(220, w), height=36)
+            if w > 430:
+                self._text(x + w, 30, "BookDownloader", COLORS["text"], "brand", "e")
+        two_columns = w >= 820
+        right_w = min(410, w * 0.44) if two_columns else w
+        left_w = w - right_w - 12 if two_columns else w
+        right_x = x + left_w + 12 if two_columns else x
         if self.active_nav == "Налаштування":
-            self.search_entry.place_forget()
-            self._draw_settings(content_x + 10, content_y, left_w + right_w + gap, height - content_y - bottom_margin)
+            self._draw_settings(x, y, w, max(430, height - y - 14))
             return
-
-        if self.active_nav == "Історія":
-            self.search_entry.place_forget()
-            self._draw_full_history(content_x + 10, content_y, left_w + right_w + gap, height - content_y - bottom_margin)
+        if self.active_nav in ("Історія", "Завантаження"):
+            self._draw_full_history(x, y, w, max(300, height - y - 14))
             return
-
-        if self.active_nav == "Завантаження":
-            self.search_entry.place_forget()
-            self._draw_downloads(content_x + 10, content_y, left_w + right_w + gap, height - content_y - bottom_margin)
-            return
-
         if self.active_nav == "Головна":
-            self.search_entry.place_forget()
-            self._draw_home(content_x + 10, content_y, left_w - 10, right_x, right_w, height - content_y - bottom_margin)
+            self._draw_home(x, y, left_w, right_x, right_w, max(350, height - y - 14) if two_columns else 350)
+            self._draw_details(right_x, y if two_columns else y + 362, right_w, max(0, height - y - 14))
             return
-
-        search_x = content_x + 10
-        search_y = content_y
-        left_content_w = left_w - 10
-        category_y = search_y + 44 + 10
-        self._draw_category_container(search_x, category_y, left_content_w)
-
-        self._draw_sidebar(height)
-        self._draw_search_bar(search_x, search_y, left_content_w)
+        self._draw_search_bar(x, y, w)
+        category_y = y + max(44, self._line_height("body") + 22) + 10
+        self._draw_category_container(x, category_y, left_w)
         panel_top = category_y + self._category_container_height() + 10
-        self._search_area_bottom = category_y + self._category_container_height()
-        results_h = max(342, height - panel_top - downloads_h - 24)
-        self._draw_results(search_x, panel_top, left_content_w, results_h)
-        self._draw_downloads(search_x, panel_top + results_h + 10, left_content_w, downloads_h)
-        self._draw_details(right_x, panel_top, right_w, height - panel_top - bottom_margin)
+        results_h = max(270, height - panel_top - 240) if two_columns else 340
+        self._draw_results(x, panel_top, left_w, results_h)
+        downloads_y = panel_top + results_h + 12
+        self._draw_downloads(x, downloads_y, left_w, 226)
+        details_y = category_y if two_columns else downloads_y + 238
+        self._draw_details(right_x, details_y, right_w, max(0, height - details_y - 14))
         self._draw_category_side_masks()
-        self._draw_filter_button(right_x, right_w, category_y)
+        self._draw_filter_button(x + left_w + 12, right_w, category_y)
+        if self.filter_open:
+            self._draw_filter_popover(x + left_w - 162, category_y + self._category_container_height())
+
     def _draw_cover(self, x: float, y: float, w: float, h: float, book: dict, *, small: bool) -> None:
         self._round_rect(x, y, x + w, y + h, 4, fill=book["cover_bg"], outline="#0b111a")
         self.canvas.create_rectangle(x + 4, y + 4, x + w - 4, y + h - 4, fill=book["cover_bg"], outline="#2a3040")
 
         accent = book["cover_accent"]
-        if book["id"] == "1984":
+        if small and w < 40:
+            self._text_fit(x + w / 2, y + h / 2, book["title"], accent, "caption", "center", w - 8)
+        elif book["id"] == "1984":
             title_font = "cover_small" if small else "cover"
             self._text(x + w / 2, y + h * 0.23, "1984", accent, title_font, "center")
             self.canvas.create_oval(x + w * 0.24, y + h * 0.46, x + w * 0.76, y + h * 0.68, outline="#d9c47f", width=2)
@@ -645,32 +703,40 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
             from pathlib import Path
             from PIL import Image, ImageTk
             image_path = Path(__file__).resolve().parent / path
-            if image_path.is_file():
-                with Image.open(image_path) as source:
-                    image = source.convert("RGBA").resize(
-                        (max(1, round(w)), max(1, round(h))), Image.Resampling.LANCZOS
-                    )
-                photo = ImageTk.PhotoImage(image)
-                if not hasattr(self, "_cover_refs"):
-                    self._cover_refs = []
+            try:
+                key = (str(image_path), image_path.stat().st_mtime_ns, round(w * self.ui_scale), round(h * self.ui_scale))
+                photo = self._cover_cache.get(key)
+                if photo is None:
+                    with Image.open(image_path) as source:
+                        resized = source.convert("RGBA").resize(key[2:], Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(resized, master=self.root)
+                    # ponytail: retain at most 64 rendered covers; use an LRU only if this grows.
+                    if len(self._cover_cache) >= 64:
+                        self._cover_cache.pop(next(iter(self._cover_cache)))
+                    self._cover_cache[key] = photo
                 self._cover_refs.append(photo)
                 self.canvas.create_image(x, y, image=photo, anchor="nw")
-            
+            except (OSError, ValueError):
+                pass  # Keep the generated cover when a local image cannot be read.
+
+    def _measure(self, text, font="body"):
+        return self.fonts[font].measure(str(text)) / self.ui_scale
 
     def _trim(self, text: str, max_width: float, font: str = "body") -> str:
         text = str(text)
-        if not text:
-            return text
-        font_obj = self.fonts[font]
-        if font_obj.measure(text) <= max_width:
+        if self._measure(text, font) <= max_width:
             return text
         ellipsis = "..."
-        if font_obj.measure(ellipsis) >= max_width:
-            return ellipsis
-        trimmed = text
-        while len(trimmed) > 1 and font_obj.measure(trimmed + ellipsis) > max_width:
-            trimmed = trimmed[:-1]
-        return trimmed.rstrip() + ellipsis
+        if self._measure(ellipsis, font) > max_width:
+            return ""
+        low, high = 0, len(text)
+        while low < high:
+            middle = (low + high + 1) // 2
+            if self._measure(text[:middle] + ellipsis, font) <= max_width:
+                low = middle
+            else:
+                high = middle - 1
+        return text[:low].rstrip() + ellipsis
 
     def _text_fit(
         self,
@@ -684,18 +750,18 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
     ) -> int:
         return self._text(x, y, self._trim(text, max_width, font), fill, font, anchor)
 
-    def _line_height(self, font: str) -> int:
-        return self.fonts[font].metrics("linespace") + 2
+    def _line_height(self, font: str) -> float:
+        return self.fonts[font].metrics("linespace") / self.ui_scale + 2
 
     def _split_long_word(self, word: str, max_width: float, font: str) -> list[str]:
-        if self.fonts[font].measure(word) <= max_width:
+        if self._measure(word, font) <= max_width:
             return [word]
 
         chunks: list[str] = []
         chunk = ""
         for char in word:
             candidate = chunk + char
-            if chunk and self.fonts[font].measure(candidate) > max_width:
+            if chunk and self._measure(candidate, font) > max_width:
                 chunks.append(chunk)
                 chunk = char
             else:
@@ -714,7 +780,7 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         for word in words:
             for piece in self._split_long_word(word, max_width, font):
                 candidate = f"{current} {piece}" if current else piece
-                if current and self.fonts[font].measure(candidate) > max_width:
+                if current and self._measure(candidate, font) > max_width:
                     lines.append(current)
                     current = piece
                 else:
@@ -725,10 +791,10 @@ class BookDownloaderApp(AppViewsMixin, UiComponentsMixin):
         if max_lines is not None and len(lines) > max_lines:
             lines = lines[:max_lines]
             ellipsis = "..."
-            if self.fonts[font].measure(lines[-1] + ellipsis) <= max_width:
+            if self._measure(lines[-1] + ellipsis, font) <= max_width:
                 lines[-1] = lines[-1].rstrip() + ellipsis
             else:
-                lines[-1] = self._trim(lines[-1], max_width, font)
+                lines[-1] = self._trim(lines[-1] + ellipsis, max_width, font)
         return lines
 
     def _text_block(
