@@ -1,5 +1,5 @@
-from login_register.register import UserRegister
+from login_register.register import Register
 
-UserLogin = UserRegister
+UserLogin = Register
 
-__all__ = ["UserLogin", "UserRegister"]
+__all__ = ["UserLogin", "Register"]
